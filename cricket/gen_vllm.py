@@ -48,9 +48,10 @@ def main():
         q.setdefault("gold", q.get("gold_answer"))
     out = Path(args.out_dir) / f"{args.tag}_rank{args.shard}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
-    done = set()
-    if out.exists():
-        done = {json.loads(l)["id"] for l in out.read_text(encoding="utf-8").splitlines() if l.strip()}
+    done = set()  # ids sampled by ANY shard of this tag, so resuming with a different node count is safe
+    for f in out.parent.glob(f"{args.tag}_rank*.jsonl"):
+        with open(f, encoding="utf-8") as fh:
+            done.update(json.loads(l)["id"] for l in fh if l.strip())
     shard = [q for i, q in enumerate(qs) if i % args.num_shards == args.shard and q["id"] not in done]
     log(f"{len(shard)} questions to sample (k={args.k}), {len(done)} already done; model {args.model_dir}")
     if not shard:

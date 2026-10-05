@@ -7,6 +7,10 @@
 #   bash .../code/cricket/submit.sh push-dataset     # ONLY after approval: dataset -> Hugging Face (private)
 #   bash .../code/cricket/submit.sh train            # LoRA SFT -> merge -> vLLM evals (base + fine-tuned) -> push
 # Extra script flags: EXTRA_ARGS="..."; extra sbatch flags after the stage name (e.g. --dependency=afterok:123).
+# One-to-one full dataset (all 425,119 source rows, 500K questions): prepare-full, pilot-full, generate-full [, retry-full]
+# Dataset variants (default: questions / train / 4 nodes), e.g. a sampled 500K set:
+#   QSET=questions-500k EXTRA_ARGS="--n_train 166700" bash .../submit.sh prepare
+#   QSET=questions-500k GEN_NAME=train-500k GEN_NODES=8 bash .../submit.sh generate   (resubmit to continue)
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 set -a
@@ -33,28 +37,50 @@ submit_vllm() {  # name nodes time vllm_args finish_args minutes [sbatch flags..
 
 M="--model_dir $MODEL_DIR"
 G="--k 4 --max_tokens 6144"
+QD=$DATA_DIR/${QSET:-questions}          # question set folder (e.g. QSET=questions-500k)
+GD=$DATA_DIR/gen/${GEN_NAME:-train}      # generated dataset folder (e.g. GEN_NAME=train-500k)
 case "$stage" in
   import-vllm)
     src="docker://$(echo "$VLLM_IMAGE_REMOTE" | sed 's#/#\##')"   # nvcr.io/nvidia/vllm:tag -> nvcr.io#nvidia/vllm:tag
     jid=$(sbatch "${COMMON[@]}" --job-name=general_sa-cricket.import-vllm --nodes=1 --time=00:45:00 "$@" \
       --wrap "srun --ntasks=1 enroot import --output $VLLM_SQSH $src");;
   prepare)
-    jid=$(submit prepare 1 00:30:00 python prepare.py "--data_dir $DATA_DIR" 25 "$@");;
+    jid=$(submit prepare 1 00:30:00 python prepare.py "--data_dir $DATA_DIR --out_name ${QSET:-questions}" 25 "$@");;
   pilot)
     out=$DATA_DIR/gen/pilot-$(date +%m%d%H%M)
     jid=$(submit_vllm pilot 1 00:45:00 "$M --questions $DATA_DIR/questions/train.jsonl --out_dir $out/samples $G --limit 96" \
       "--questions_dir $DATA_DIR/questions --out_dir $out --limit 96" 35 "$@");;
   generate)
-    out=$DATA_DIR/gen/train
-    jid=$(submit_vllm datagen 4 02:00:00 "$M --questions $DATA_DIR/questions/train.jsonl --out_dir $out/samples $G" \
-      "--questions_dir $DATA_DIR/questions --out_dir $out" 100 "$@");;
+    jid=$(submit_vllm datagen "${GEN_NODES:-4}" 02:00:00 "$M --questions $QD/train.jsonl --out_dir $GD/samples $G" \
+      "--questions_dir $QD --out_dir $GD" 100 "$@");;
+  # ---- one-to-one dataset: every Valarmathy/CricketData row (425,119) gets >= 1 question (500,000 total by default)
+  prepare-full)
+    jid=$(submit prepare-full 1 00:45:00 python prepare.py "--data_dir $DATA_DIR --out_name ${QSET:-questions-full} --mode full" 40 "$@");;
+  pilot-full)   # 40 questions per type (240) on 1 node: check wording/accuracy of every type before the big run
+    QD=$DATA_DIR/${QSET:-questions-full}; out=$DATA_DIR/gen/pilot-full-$(date +%m%d%H%M)
+    jid=$(FINISH_SCRIPT=build_full_dataset.py submit_vllm pilot-full 1 00:45:00 \
+      "$M --questions $QD/pilot.jsonl --out_dir $out/samples $G" \
+      "--questions_dir $QD --questions_file pilot.jsonl --out_dir $out" 35 "$@");;
+  generate-full)  # resumable: resubmit (any node count) until nothing is pending
+    QD=$DATA_DIR/${QSET:-questions-full}; GD=$DATA_DIR/gen/${GEN_NAME:-train-full}
+    jid=$(FINISH_SCRIPT=build_full_dataset.py submit_vllm datagen-full "${GEN_NODES:-8}" 02:00:00 \
+      "$M --questions $QD/all.jsonl --out_dir $GD/samples $G" "--questions_dir $QD --out_dir $GD" 100 "$@");;
+  retry-full)   # questions with no correct sample: 8 more samples each, then rebuild (keeps one-to-one coverage)
+    QD=$DATA_DIR/${QSET:-questions-full}; GD=$DATA_DIR/gen/${GEN_NAME:-train-full}
+    jid=$(FINISH_SCRIPT=build_full_dataset.py submit_vllm retry-full "${GEN_NODES:-1}" 01:00:00 \
+      "$M --questions $GD/retry.jsonl --out_dir $GD/samples --tag retry --k 8 --max_tokens 8000 --seed 1" \
+      "--questions_dir $QD --out_dir $GD" 50 "$@");;
+  push-full)    # upload the one-to-one dataset (refuses if any source row is uncovered)
+    GD=$DATA_DIR/gen/${GEN_NAME:-train-full}
+    jid=$(submit push-full 1 01:00:00 python push_full_dataset.py \
+      "--final_dir $GD/final --repo_id ${HF_FULL_DATASET_REPO:-${HF_DATASET_REPO}-Full}" 55 "$@");;
   push-dataset)
     jid=$(submit push-dataset 1 00:20:00 python push_dataset.py \
-      "--final_dir $DATA_DIR/gen/train/final --repo_id $HF_DATASET_REPO --confirm" 15 "$@");;
+      "--final_dir $GD/final --repo_id $HF_DATASET_REPO --confirm" 15 "$@");;
   train)
-    jid=$(submit sft 4 02:00:00 torchrun train.py "$M --data_dir $DATA_DIR/gen/train/final --croot $CROOT --no_eval" 90 "$@")
+    jid=$(submit sft 4 02:00:00 torchrun train.py "$M --data_dir $GD/final --croot $CROOT --no_eval" 90 "$@")
     run=$CROOT/runs/general_sa-cricket.sft-$jid; ck=$CROOT/checkpoints/general_sa-cricket.sft-$jid
-    T="--questions $DATA_DIR/gen/train/final/test.jsonl --out_dir $run/eval $G"
+    T="--questions $GD/final/test.jsonl --out_dir $run/eval $G"
     mj=$(EXTRA_ARGS= submit merge 1 00:40:00 python merge.py "$M --adapter $ck --out $ck/merged" 35 --dependency=afterok:$jid)
     bj=$(EXTRA_ARGS= FINISH_SCRIPT=none submit_vllm eval-base 1 01:00:00 "$M $T --tag base" "" 50)
     fj=$(EXTRA_ARGS= FINISH_SCRIPT=finish_eval.py submit_vllm eval-ft 1 01:00:00 "--model_dir $ck/merged $T --tag ft" \

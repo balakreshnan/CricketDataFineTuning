@@ -10,7 +10,7 @@ import csv
 import json
 import random
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 QTYPES = ("run_rate", "chase_rate", "milestone")
 SYSTEM_PROMPT = ("You are a cricket analyst. Work through the problem step by step, then give the final answer "
@@ -192,3 +192,137 @@ def write_jsonl(path, rows):
 def read_jsonl(path):
     with open(path, encoding="utf-8") as f:
         return [json.loads(l) for l in f if l.strip()]
+
+
+# ================================================================== full one-to-one coverage
+# Every source row (all 425,119, incl. extras, innings boundaries and rain-affected matches) gets >= 1 question.
+# The original three types keep their exact wording; three more cover rows where those are undefined.
+ALL_QTYPES = ("run_rate", "chase_rate", "milestone", "projection", "strike_rate", "legal_balls")
+SOURCE_ROWS = 425_119  # Valarmathy/CricketData raw/ball_by_ball_it20.csv
+
+
+def _ctx(r):
+    """Same situation text as make_questions()."""
+    inn, bat1, bat2 = r["Innings"], r["Bat First"], r["Bat Second"]
+    batting, bowling = (bat1, bat2) if inn == "1" else (bat2, bat1)
+    bb = 120 - int(r["Balls Remaining"])
+    ctx = f"T20 International: {bat1} v {bat2} at {r['Venue']}, {r['Date']}.\n"
+    if inn == "1":
+        ctx += f"{batting} are batting first. "
+    else:
+        ctx += f"{batting} are chasing a target of {int(r['Target Score'])} set by {bowling}. "
+    ctx += (f"After {overs(bb)} overs (cricket notation: overs.balls) they are {int(r['Innings Runs'])}/"
+            f"{int(r['Innings Wickets'])}. {r['Batter']} is on {int(r['Total Batter Runs'])} off "
+            f"{int(r['Batter Balls Faced'])} balls and {r['Non Striker']} is on {int(r['Total Non Striker Runs'])} off "
+            f"{int(r['Non Striker Balls Faced'])}. {r['Bowler']} bowled the last delivery.")
+    return ctx, batting
+
+
+def row_questions(r, info, dls):
+    """All question types that are well-defined for this row: {qtype: (question, gold, answer_kind)}."""
+    inn, br_ = r["Innings"], int(r["Balls Remaining"])
+    bb, runs = 120 - br_, int(r["Innings Runs"])
+    batter, br, bf = r["Batter"], int(r["Total Batter Runs"]), int(r["Batter Balls Faced"])
+    in_range = 0 <= br_ <= 120  # 8 source rows show -1 balls remaining (data anomaly): no overs-based questions
+    _, batting = _ctx(r)
+    out = {}
+    if in_range and bb >= 1:
+        out["run_rate"] = (f"What is {batting}'s current run rate in runs per over? Round to 2 decimal places.",
+                           round(runs * 6 / bb, 2), "rate")
+    if in_range and not dls and br_ > 0:  # rain-revised targets make chase arithmetic ambiguous
+        if inn == "2" and float(r["Runs to Get"] or 0) > 0:
+            out["chase_rate"] = (f"What run rate (runs per over) do {batting} need over the rest of their 20 overs to "
+                                 f"reach the target? Round to 2 decimal places.",
+                                 round((int(r["Target Score"]) - runs) * 6 / br_, 2), "rate")
+        if inn == "1" and info.get("1", {}).get("full_20") and info["1"]["final_runs"] > runs:
+            final = info["1"]["final_runs"]
+            out["chase_rate"] = (f"{batting} finished their 20 overs on {final}. At what run rate (runs per over) did they "
+                                 f"score over the rest of their innings from this point? Round to 2 decimal places.",
+                                 round((final - runs) * 6 / br_, 2), "rate")
+    if in_range and inn == "1" and 1 <= bb < 120:
+        out["projection"] = (f"Take {batting}'s current run rate to be their total runs so far divided by the overs bowled "
+                             f"so far. If they keep scoring at exactly that rate for the rest of their 20 overs, what total "
+                             f"will they finish on? Round to the nearest whole run (halves round up).",
+                             int(runs * 120 / bb + 0.5), "int")
+    if br >= 1 and bf >= 1:
+        m = (br // 50 + 1) * 50
+        out["milestone"] = (f"{batter} wants to reach {m} runs. If {batter} keeps scoring at their own current strike "
+                            f"rate (their runs per ball faced so far), how many more balls must {batter} face to reach "
+                            f"{m}? Round up to a whole number of balls.", -(-(m - br) * bf // br), "int")
+    if bf >= 1:
+        out["strike_rate"] = (f"What is {batter}'s current strike rate (runs per 100 balls faced)? Round to 2 decimal places.",
+                              round(br * 100 / bf, 2), "rate")
+    if not out:  # innings opened with a wide / no-ball: nothing else is defined yet
+        kind = "no-ball" if "noballs" in r["Extra Type"] else "wide"
+        out["legal_balls"] = (f"The innings has opened with a {kind} from {r['Bowler']} that cost {r['Runs From Ball']} "
+                              f"run(s). How many legal deliveries are still to be bowled in {batting}'s 20-over innings?",
+                              br_, "int")
+    return out
+
+
+def _source(r, dls):
+    return {"row_index": int(r.get("") or r.get("Unnamed: 0")), "match_id": int(r["Match ID"]), "date": r["Date"],
+            "venue": r["Venue"], "bat_first": r["Bat First"], "bat_second": r["Bat Second"], "innings": int(r["Innings"]),
+            "over": int(r["Over"]), "ball": int(r["Ball"]), "batter": r["Batter"], "bowler": r["Bowler"],
+            "valid_ball": int(r["Valid Ball"]), "extra_type": r["Extra Type"], "wicket": int(r["Wicket"]),
+            "innings_runs": int(r["Innings Runs"]), "innings_wickets": int(r["Innings Wickets"]),
+            "balls_remaining": int(r["Balls Remaining"]),
+            "target_score": int(r["Target Score"]) if r["Innings"] == "2" else None,
+            "batter_runs": int(r["Total Batter Runs"]), "batter_balls_faced": int(r["Batter Balls Faced"]),
+            "rain_revised_match": dls}
+
+
+def build_full(csv_path, target_total=500_000, test_frac=0.1, seed=0):
+    """One question for EVERY source row (least-used valid type, for balance), then a second, different question on
+    random training rows until target_total. Test matches = the same held-out matches as build_splits()."""
+    raw = load_matches(csv_path)
+    clean = clean_matches(raw)
+    mids = sorted(clean)
+    random.Random(seed).shuffle(mids)  # identical test matches to build_splits(seed)
+    test_m = set(mids[: max(1, int(len(mids) * test_frac))])
+    rng = random.Random(seed + 1)
+    rows = []
+    for mid in sorted(raw):
+        dls, info = mid not in clean, _innings_info(raw[mid])
+        for r in raw[mid]:
+            rows.append((r, info, dls, "test" if mid in test_m else "train"))
+    order = list(range(len(rows)))
+    rng.shuffle(order)
+    counts, primary, avail = Counter(), {}, {}
+    for i in order:  # greedy balance across types
+        r, info, dls, _ = rows[i]
+        avail[i] = row_questions(r, info, dls)
+        qt = min(avail[i], key=lambda t: (counts[t], ALL_QTYPES.index(t)))
+        primary[i] = qt
+        counts[qt] += 1
+    extra_n = max(0, target_total - len(rows))
+    cands = [i for i in order if rows[i][3] == "train" and len(avail[i]) > 1]
+    extra = {}
+    for i in rng.sample(cands, min(extra_n, len(cands))):
+        rest = [t for t in avail[i] if t != primary[i]]
+        qt = min(rest, key=lambda t: (counts[t], ALL_QTYPES.index(t)))
+        extra[i] = qt
+        counts[qt] += 1
+
+    def q(i, qt):
+        r, info, dls, split = rows[i]
+        ctx, _ = _ctx(r)
+        text, gold, kind = avail[i][qt]
+        src = _source(r, dls)
+        return {"id": f"{r['Match ID']}-{r['Innings']}-{src['row_index']}-{qt}", "qtype": qt, "answer_kind": kind,
+                "gold": gold, "split": split,
+                "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"{ctx}\n\n{text}"}],
+                "source": src}
+
+    out = {"train": [], "test": []}
+    for i in range(len(rows)):
+        out[rows[i][3]].append(q(i, primary[i]))
+        if i in extra:
+            out[rows[i][3]].append(q(i, extra[i]))
+    stats = {"source_dataset": "Valarmathy/CricketData", "source_rows": len(rows),
+             "source_rows_train": sum(1 for x in rows if x[3] == "train"),
+             "source_rows_test": sum(1 for x in rows if x[3] == "test"), "rows_with_two_questions": len(extra),
+             "questions_train": len(out["train"]), "questions_test": len(out["test"]),
+             "questions_total": len(out["train"]) + len(out["test"]), "questions_by_type": dict(counts),
+             "matches_total": len(raw), "rain_revised_matches_in_train": len(raw) - len(clean), "test_matches": len(test_m)}
+    return out["train"], out["test"], stats
