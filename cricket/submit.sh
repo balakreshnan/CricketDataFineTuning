@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Cricket reasoning pipeline on Hecate. Run on the login node:
+#   bash .../code/cricket/submit.sh import-vllm      # once: NGC vLLM image -> squashfs on Lustre
+#   bash .../code/cricket/submit.sh prepare          # download CricketData, build train/test questions (1 node)
+#   bash .../code/cricket/submit.sh pilot            # 96 questions x k=4 on 1 node (vLLM): speed + quality check
+#   bash .../code/cricket/submit.sh generate         # full reasoning dataset (vLLM, 4 nodes; resubmit to continue)
+#   bash .../code/cricket/submit.sh push-dataset     # ONLY after approval: dataset -> Hugging Face (private)
+#   bash .../code/cricket/submit.sh train            # LoRA SFT -> merge -> vLLM evals (base + fine-tuned) -> push
+# Extra script flags: EXTRA_ARGS="..."; extra sbatch flags after the stage name (e.g. --dependency=afterok:123).
+set -euo pipefail
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+set -a
+source "$HERE/config.env"
+set +a
+mkdir -p "$CROOT"/{data,runs,checkpoints,logs}
+stage=${1:-}
+shift || true
+COMMON=(--parsable --account="$ACCOUNT" --partition="$PARTITION" --chdir="$RUN_FROM" --export=ALL --output="$CROOT/logs/%x-%j.log")
+
+submit() {  # name nodes time launch script args minutes [sbatch flags...]   (PyTorch container: job.sbatch)
+  local name=$1 nodes=$2 time=$3 launch=$4 script=$5 args=$6 minutes=$7
+  shift 7
+  SCRIPT=$script JOB_ARGS="$args ${EXTRA_ARGS:-}" LAUNCH=$launch DEADLINE_MINUTES=$minutes \
+    sbatch "${COMMON[@]}" --job-name="general_sa-cricket.$name" --nodes="$nodes" --time="$time" "$@" "$HERE/job.sbatch"
+}
+
+submit_vllm() {  # name nodes time vllm_args finish_args minutes [sbatch flags...]   (vLLM container: vllm.sbatch)
+  local name=$1 nodes=$2 time=$3 vargs=$4 fargs=$5 minutes=$6
+  shift 6
+  VLLM_ARGS="$vargs ${EXTRA_ARGS:-}" FINISH_SCRIPT=${FINISH_SCRIPT-finish_gen.py} FINISH_ARGS="$fargs" DEADLINE_MINUTES=$minutes \
+    sbatch "${COMMON[@]}" --job-name="general_sa-cricket.$name" --nodes="$nodes" --time="$time" "$@" "$HERE/vllm.sbatch"
+}
+
+M="--model_dir $MODEL_DIR"
+G="--k 4 --max_tokens 6144"
+case "$stage" in
+  import-vllm)
+    src="docker://$(echo "$VLLM_IMAGE_REMOTE" | sed 's#/#\##')"   # nvcr.io/nvidia/vllm:tag -> nvcr.io#nvidia/vllm:tag
+    jid=$(sbatch "${COMMON[@]}" --job-name=general_sa-cricket.import-vllm --nodes=1 --time=00:45:00 "$@" \
+      --wrap "srun --ntasks=1 enroot import --output $VLLM_SQSH $src");;
+  prepare)
+    jid=$(submit prepare 1 00:30:00 python prepare.py "--data_dir $DATA_DIR" 25 "$@");;
+  pilot)
+    out=$DATA_DIR/gen/pilot-$(date +%m%d%H%M)
+    jid=$(submit_vllm pilot 1 00:45:00 "$M --questions $DATA_DIR/questions/train.jsonl --out_dir $out/samples $G --limit 96" \
+      "--questions_dir $DATA_DIR/questions --out_dir $out --limit 96" 35 "$@");;
+  generate)
+    out=$DATA_DIR/gen/train
+    jid=$(submit_vllm datagen 4 02:00:00 "$M --questions $DATA_DIR/questions/train.jsonl --out_dir $out/samples $G" \
+      "--questions_dir $DATA_DIR/questions --out_dir $out" 100 "$@");;
+  push-dataset)
+    jid=$(submit push-dataset 1 00:20:00 python push_dataset.py \
+      "--final_dir $DATA_DIR/gen/train/final --repo_id $HF_DATASET_REPO --confirm" 15 "$@");;
+  train)
+    jid=$(submit sft 4 02:00:00 torchrun train.py "$M --data_dir $DATA_DIR/gen/train/final --croot $CROOT --no_eval" 90 "$@")
+    run=$CROOT/runs/general_sa-cricket.sft-$jid; ck=$CROOT/checkpoints/general_sa-cricket.sft-$jid
+    T="--questions $DATA_DIR/gen/train/final/test.jsonl --out_dir $run/eval $G"
+    mj=$(EXTRA_ARGS= submit merge 1 00:40:00 python merge.py "$M --adapter $ck --out $ck/merged" 35 --dependency=afterok:$jid)
+    bj=$(EXTRA_ARGS= FINISH_SCRIPT=none submit_vllm eval-base 1 01:00:00 "$M $T --tag base" "" 50)
+    fj=$(EXTRA_ARGS= FINISH_SCRIPT=finish_eval.py submit_vllm eval-ft 1 01:00:00 "--model_dir $ck/merged $T --tag ft" \
+      "--run_dir $run --adapter_dir $ck --k 4 --hub_model_id $HF_MODEL_REPO" 50 --dependency=afterok:$mj:$bj)
+    echo "sft $jid -> merge $mj -> eval-ft $fj (with eval-base $bj); run dir $run";;
+  *)
+    sed -n '2,10p' "$0"; exit 1;;
+esac
+echo "$stage job $jid (logs in $CROOT/logs/)"
