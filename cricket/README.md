@@ -9,11 +9,18 @@ layout and every file involved, so the run can be repeated or modified.
 
 Reference run: **2026-10-05**, SFT job `696652`, user `bbalakreshna`, account `general_sa`, partition `batch-xdr`.
 
+**Part I (§1–§11)** documents the reference pipeline: 1,500 sampled source rows → 4,500 reasoning rows → LoRA on 16 GPUs.
+**Part II (§12–§14)** documents the scale-up: **every one of the 425,119 source rows** → **500,000 reasoning rows**
+distilled with **vLLM on 32 Rubin GPUs** (1.58 B generated tokens), and a **1-epoch fine-tune on 32 GPUs** within the
+5-hour partition limit, including hardware, memory, network and GPU-efficiency measurements.
+
 ## Published artifacts (public on Hugging Face)
 
 | artifact | link | contents | revision at publication |
 |---|---|---|---|
 | **Reasoning dataset** | [Balab2021/CricketData-T20-Reasoning-Qwen3.8](https://huggingface.co/datasets/Balab2021/CricketData-T20-Reasoning-Qwen3.8) | `data/train.jsonl` (4,500 verified reasoning rows, 3 per source delivery), `data/test.jsonl` (600 held-out questions with gold answers), `stats.json`, dataset card; license CC0-1.0 (as the source data) | `efa295283fc9b2a012b9fa06a77bf393e35de212` |
+| **Full one-to-one reasoning dataset** (Part II) | [Balab2021/CricketData-T20-Reasoning-Qwen3.8-Full](https://huggingface.co/datasets/Balab2021/CricketData-T20-Reasoning-Qwen3.8-Full) | 500,000 verified rows covering all 425,119 source rows: `data/train-0000{0..4}.jsonl` (458,702), `data/test-00000.jsonl` (41,298, held-out matches), `data/eval-00000.jsonl` (the fixed 600-question benchmark), `stats.json`, card; 2.08 GB | `ad669766ef046c8ccc5330d077c77118b692ec00` |
+| **Fine-tuned reasoning LoRA, full dataset** (Part II) | [Balab2021/Qwen3.8-27B-Cricket-Reasoning-Full-LoRA](https://huggingface.co/Balab2021/Qwen3.8-27B-Cricket-Reasoning-Full-LoRA) | pushed automatically by the `train-full` chain when training and evals finish (§13) | - |
 | **Fine-tuned reasoning LoRA** | [Balab2021/Qwen3.8-27B-Cricket-Reasoning-LoRA](https://huggingface.co/Balab2021/Qwen3.8-27B-Cricket-Reasoning-LoRA) | `adapter_model.safetensors` + `adapter_config.json` (LoRA r32/α64 on `Qwen/Qwen3.8-27B`), tokenizer files and chat template, model card with the results, `eval_report/` (report.md, base/ft eval summaries, comparison.json, training metrics, plots) | `40af7e4f6122ac69372d7fa36a0a00f0202ad761` |
 
 Both repos were created private by the pipeline and made **public** by the owner after review (verified 2026-10-05:
@@ -405,3 +412,246 @@ per-GPU vLLM logs in `logs/general_sa-cricket.<stage>-<job>/`, and the W&B proje
 - Make the overs→balls conversion an explicit step in the training traces (all remaining chase_rate errors are there).
 - Clean-up candidates on Lustre: empty failed pilot dirs `data/gen/pilot-10051325`, `pilot-10051330`; HF-`generate()`
   pilot `pilot-10051237`; intermediate `checkpoint-*` dirs (7.5 GB) once the adapter is no longer being iterated on.
+
+---
+---
+
+# Part II - Full one-to-one dataset (500K) with vLLM, and fine-tuning on 32 GPUs
+
+Dates: 2026-10-05 / 06. Same cluster, account, images, model revision and credentials as Part I unless stated.
+
+## 12. Distilling the 500K-row reasoning dataset with vLLM
+
+### 12.1 Goal and coverage
+
+Requirement: **at least one verified reasoning row for every row** of `Valarmathy/CricketData`
+(`raw/ball_by_ball_it20.csv`, dataset revision `a2518e9db3bd6e745dabc645a423eed6f053207f`, **425,119 rows**), about
+500K rows in total. `prepare.py --mode full` re-counts the CSV with `csv.reader` and stops unless it has exactly
+425,119 rows; the revision and row count are written to `questions-full/stats.json`.
+
+The three Part I question types are undefined for many rows (extras, first balls, all-out innings, rain-affected
+matches), so three types were added. Each row gets the **least-used type that is valid for it** (greedy, seeded
+shuffle → balanced mix); 74,881 random training rows get a second, different type to reach exactly 500,000.
+
+| type | question | exact answer | rows where valid |
+|---|---|---|---|
+| `run_rate` | current run rate (overs in cricket notation) | `round(runs*6/balls, 2)` | 424,776 |
+| `chase_rate` | rate needed to win (inn. 2) / scored over rest of innings (inn. 1, full 20 overs); not in rain-revised matches | `round(need*6/balls_left, 2)` | 378,962 |
+| `milestone` | balls to the next 50 at the striker's own strike rate | `ceil(need*faced/runs)` | 369,258 |
+| `projection` *(new)* | projected 20-over total at the current rate (inn. 1) - wording defines the rate as *total runs ÷ overs bowled* | `floor(runs*120/balls + 0.5)` | 223,081 |
+| `strike_rate` *(new)* | striker's strike rate | `round(runs*100/faced, 2)` | 400,092 |
+| `legal_balls` *(new)* | innings opened with a wide / no-ball: legal deliveries still to come | balls remaining | 40 (rows where nothing else is defined) |
+
+8 rows show "−1 balls remaining" (121 legal balls - a source-data anomaly) and get no overs-based question.
+Scores with runs ≤ wickets are spelled out ("1/3 (1 run for the loss of 3 wickets)") - see §12.6.
+
+Split: by match, identical to Part I (177 held-out matches → **test**, 41,298 rows; 1,597 + 68 rain-revised matches →
+**train**, 458,702 rows). The Part I 600-question benchmark (`eval.jsonl`) lies entirely in the test matches and
+keeps its exact wording, so evaluations stay comparable.
+
+### 12.2 Inference design
+
+| aspect | choice | why |
+|---|---|---|
+| engine | vLLM offline `LLM.generate` (`gen_vllm.py`) in `dl/dgx/vllm:rubin-py3-devel` (vLLM 0.30.0, torch 2.15 rubin, Triton 3.6, CUDA 13.5) | continuous batching; HF `generate()` reached only ~110 tok/s/GPU on this model (GPUs mostly idle) |
+| parallelism | **data parallel: one independent engine per GPU** (`tensor_parallel_size=1`), shard = node × 4 + local GPU, 32 shards on 8 nodes | the bf16 model (51 GB) fits one 279 GiB GPU with a large KV cache; no inter-GPU communication at all, linear scaling, no NCCL timeouts |
+| memory | `gpu_memory_utilization=0.90` (≈250 GiB per GPU: weights ~51 GiB, the rest KV cache + activations), `max_model_len 8192`, prefix caching on (the system prompt and match context repeat across the k samples) | Gated-DeltaNet layers keep a fixed-size state; only the 16 full-attention layers grow a KV cache, so hundreds of sequences fit per GPU |
+| sampling | thinking mode, `n=4` per question, temperature 1.0, top_p 0.95, top_k 20, `max_tokens 6144`, `skip_special_tokens=False`, seed = shard | model-card settings; 4 samples to pick the shortest correct trace |
+| work unit | 256 questions per `generate()` call (= 1,024 sequences queued); records appended to `samples/train_rank{shard}.jsonl` after each call | resume granularity; vLLM keeps the GPU saturated within a call |
+| resume | at start each worker reads **all** shard files of its tag and skips sampled ids → safe to resubmit with a different node count | jobs are capped at 2 h; the chain resubmits automatically |
+| deadline | workers stop starting new chunks after 100 min (job limit 2 h) | never killed mid-write |
+| post-processing | `build_full_dataset.py` (PyTorch container, 1 process) streams the 2M samples, keeps the shortest correct finished trace per question, writes `final/`, `retry.jsonl`, coverage report, W&B summary | 4.7 GB of samples processed without loading everything |
+
+### 12.3 Hardware (per `batch-xdr` node, measured with `tools/collect_stats.sh`)
+
+| component | measured |
+|---|---|
+| GPUs | 4 × NVIDIA Rubin, compute capability 10.7 (sm_107), **286,524 MiB** each (≈279.5 GiB usable to PyTorch), power limit **2,300 W**, max SM clock 2,424 MHz, max memory clock 4,752 MHz, driver 620.43 |
+| GPU ↔ GPU in a node | NVLink, `NV36` between every pair (36 links per GPU, reported 41 GB/s per link) |
+| multi-node NVLink | GPU fabric state *Completed / Healthy, bandwidth Full* (nodes belong to an NVLink block, `nvlblk..` node feature) |
+| network | **8 × InfiniBand 4X XDR, 800 Gb/s each** (2 per GPU, 1.6 Tb/s ≈ 200 GB/s per GPU, 6.4 Tb/s per node) + 4 × 400 Gb/s Ethernet (NDR) |
+| PCIe/NUMA | GPU0-1 + NIC0-5 on NUMA 0 (CPUs 0-87,176-263); GPU2-3 + NIC6-11 on NUMA 1 (CPUs 88-175,264-351) |
+| CPU / RAM | 2 × NVIDIA Vera ("Olympus", aarch64), 352 hardware threads; 1.43 TB RAM |
+
+### 12.4 Jobs and compute
+
+| stage | job | nodes × GPUs | wall time | node-h |
+|---|---|---|---|---|
+| prepare-full (download, verify 425,119 rows, build 500K questions) | 696931 / 696975 (rebuild after rewording) | 1 × 4 | 0:47 / 0:48 | 0.03 |
+| pilot-full, 240 questions × 4 (40 per type) | 696932 / 696976 | 1 × 4 | 2:54 / 2:43 | 0.09 |
+| **datagen-full** (main pass) | **697019** | **8 × 32** | **1:42:51** | **13.71** |
+| datagen-full (continuation: last 2,448 questions) | 697021 | 8 × 32 | 8:20 | 1.11 |
+| datagen-full (buffer; nothing left) | 697178 | 8 × 32 | 1:54 | 0.25 |
+| retry-full (87 unsolved × 8 samples, then 247 incl. reruns) | 697022 | 1 × 4 | 5:15 | 0.09 |
+| push-full (refused: 63 rows uncovered) | 697023 | 1 × 4 | 0:54 | 0.02 |
+| fix-ambiguous (clarify runs ≤ wickets scores) | 700650 | 1 × 4 | 0:50 | 0.01 |
+| retry-full, tag `retry2` (87 clarified questions × 8) | 700651 | 1 × 4 | 4:12 | 0.07 |
+| **push-full** | **700652** | 1 × 4 | 1:12 | 0.02 |
+| **total** | | | | **≈ 15.4 node-h ≈ 62 GPU-h** |
+
+### 12.5 Throughput and GPU efficiency
+
+| metric | value |
+|---|---|
+| samples generated | **2,002,672** (2,000,000 first pass + 1,976 retry + 696 retry2) |
+| tokens generated | **1,581,921,168** (mean 790 per sample; prompts ~220 tokens each are prefill, not counted) |
+| per-GPU generation throughput, main job | **8,238 tok/s mean** (min 8,003, max 8,386 over 32 GPUs - ±2%, i.e. even load) |
+| aggregate throughput | **≈ 264,000 tok/s** on 32 GPUs; 497,552 questions in 99 min of generation |
+| engine start-up | ~52 s per engine (model load from Lustre + CUDA graphs); 4 engines per node share the page cache |
+| throughput in the 1-node pilots / retries | 8,800–9,500 tok/s per GPU on full chunks; 2,300–2,900 on tiny retry batches (87 questions: too few concurrent sequences) |
+| tail inefficiency | the continuation job 697021 used 8 nodes for 2,448 questions (16 of 32 engines had work, 3,230 tok/s mean); a 1-node tail job would have cost 8× less |
+| compute estimate | decode ≈ 2 × 27 B FLOP/token → 8,238 tok/s ≈ **0.45 PFLOP/s per GPU** of dense matmul (rough; excludes prefill, attention and sampling) |
+| GPU memory | 90% of 279.5 GiB reserved by vLLM (weights ≈ 51 GiB; remainder KV cache / activations / CUDA graphs) |
+| network | **no GPU↔GPU traffic** (independent engines); NVLink and InfiniBand idle apart from Lustre I/O: model load ≈ 52 GB per node per job, sample output 4.7 GB in total |
+| cost per question | ≈ 7.4 GPU-seconds (4 samples), i.e. ≈ 480 questions per GPU-hour |
+
+Throughput per GPU was ~55× the HF-`generate()` path (110 tok/s) used in Part I's first pilot.
+
+### 12.6 Quality, retries and the ambiguity fix
+
+Base-model results on all 500,000 questions (2.0 M samples, before selection):
+
+| type | samples | generated tokens | correct per sample | finished (not truncated) | questions solved |
+|---|---|---|---|---|---|
+| run_rate | 400,648 | 172.1 M | 97.75% | 99.77% | 100% |
+| chase_rate | 401,352 | 435.3 M | 92.52% | 98.97% | 100% |
+| milestone | 400,024 | 350.6 M | 99.20% | 99.39% | 100% |
+| projection | 400,496 | 396.8 M | 97.89% | 99.51% | 100% |
+| strike_rate | 399,992 | 226.9 M | 99.13% | 99.21% | 100% |
+| legal_balls | 160 | 0.14 M | 100% | 100% | 100% |
+| **overall** | **2,002,672** | **1,581.9 M** | **97.30%** | 99.37% | **100%** |
+
+Two wording problems were found and fixed **before** they could cost compute or coverage:
+
+1. **Projection overthinking (pilot).** "Keep scoring at their current run rate" made the model debate whether the
+   rate meant the recent over and reconstruct the batting order from distractor details: 88.7% correct, 10%
+   truncated, 2,215 tokens. Defining the rate in the question ("total runs so far divided by the overs bowled so far")
+   → 98.1% correct, 0.6% truncated, 869 tokens.
+2. **Runs/wickets notation (after the main pass).** 87 questions stayed unsolved after 12 samples each, leaving 63
+   source rows uncovered; the upload correctly refused. All 87 had **runs ≤ wickets** ("1/3"): in most countries
+   runs/wickets, in Australia wickets/runs, and the model consistently chose the Australian reading.
+   `tools/fix_ambiguous_scores.py` rewrote these questions in place ("1/3 (1 run for the loss of 3 wickets)"), the
+   `retry2` pass solved all 87, and `_ctx()` now spells such scores out for future builds.
+
+Final dataset (`data/gen/train-full/final/stats.json`): **500,000 rows** (train 458,702, test 41,298), **425,119 /
+425,119 source rows covered**, 0 unsolved, kept traces 464 tokens on average (shortest correct of the samples).
+
+### 12.7 Outputs and storage
+
+| path (under `cricket/data/`) | size | content |
+|---|---|---|
+| `questions-full/{train,test,all,eval,pilot}.jsonl`, `stats.json` | 1.2 GB | questions (with `split`, `source`, exact `gold`) |
+| `gen/train-full/samples/{train,retry,retry2}_rank*.jsonl` | 4.7 GB | every sample: text, tokens, finished, prediction, correct |
+| `gen/train-full/final/train.jsonl` / `test.jsonl` | 2.5 GB / 228 MB | dataset rows (+ `completion_text`, the exact SFT target) |
+| `gen/train-full/final/{eval.jsonl, stats.json, samples.md, uncovered_rows.jsonl}` | small | benchmark copy, statistics, review examples, coverage report (empty) |
+| `gen/train-full/retry.jsonl` | - | unsolved questions (empty at the end) |
+| Hugging Face `Balab2021/CricketData-T20-Reasoning-Qwen3.8-Full` | 2.08 GB | train in 5 shards of 100K rows, test, eval, card, stats |
+
+### 12.8 How to repeat
+
+```bash
+C=/lustre/fsw/general_sa/bbalakreshna/clustercodes/code/cricket/submit.sh
+bash $C prepare-full                       # verify 425,119 rows, build 500K questions (+ eval.jsonl, pilot.jsonl)
+bash $C pilot-full                         # 240 questions, check every type (accuracy, tokens, truncation)
+bash $C generate-full                      # 8 nodes (GEN_NODES=..), resubmit / chain with --dependency=afterany:<job>
+bash $C retry-full                         # 8 more samples for unsolved questions (tag retry; use EXTRA_ARGS="--tag retry2" for a 2nd round)
+bash $C fix-ambiguous                      # only if unsolved questions have runs <= wickets scores
+bash $C push-full                          # refuses while any source row is uncovered
+```
+
+Tips: size the continuation job to the remaining work (`GEN_NODES=1` for a small tail); run a stratified pilot after
+any wording change; check `final/uncovered_rows.jsonl` before publishing.
+
+---
+
+## 13. Fine-tuning on the 500K dataset with 32 GPUs
+
+### 13.1 Goal
+
+One epoch over the 458,702 training rows (457,702 after a 1,000-row dev set) **inside the 5-hour job limit** of
+`batch-xdr`, then the same evaluation as Part I (600-question benchmark, vLLM, k = 4) and an automatic push of the
+adapter to `Balab2021/Qwen3.8-27B-Cricket-Reasoning-Full-LoRA`.
+
+### 13.2 Throughput benchmark (1 node, 4 GPUs, 20,000 real rows, 30 steps each)
+
+| variant | job | per-GPU batch | grad. ckpt | batching | rows/s (4 GPUs) | rows/s/GPU | result |
+|---|---|---|---|---|---|---|---|
+| D - Part I settings | 700694 | 2 × accum 2 | on | random | 1.88 | 0.47 | baseline; 1 epoch on 32 GPUs ≈ 8.5 h |
+| **A - chosen** | 700695 | **8** | on | **length-grouped** | **4.55** | **1.14** | **2.4× faster**; 1 epoch on 32 GPUs ≈ 3.4 h |
+| B | 700696 | 16 | on | length-grouped | - | - | **OOM**: tried to allocate 90.7 GiB with 252 GiB already in use |
+| C | 700697 | 8 | **off** | length-grouped | - | - | **OOM**: activations without recomputation exceed 279 GiB |
+
+Why B fails: the vocabulary has 248,320 tokens, so the output logits of a batch take
+`batch × seq × 248,320 × 4 B` in fp32 - for 16 × 6,144 tokens that alone is ~98 GB, plus its gradient. Length
+grouping in HF Trainer puts the **longest** mega-batch first, so a configuration that survives the first steps is
+safe for the whole epoch (variant A passed this). Mean sequence length: 700 tokens (≈ 220 prompt + 464 reasoning +
+answer); 0 rows exceed `max_len 6144`.
+
+### 13.3 Configuration (stage `train-full`)
+
+| parameter | value |
+|---|---|
+| nodes / GPUs | **8 nodes × 4 = 32 Rubin GPUs**, `--exclusive`, job limit 4:59:00, stop new steps at 280 min |
+| parallelism | plain **DDP**, full bf16 model replica per GPU (≈ 51 GiB); only LoRA weights are trainable and all-reduced |
+| LoRA | r 32, α 64, dropout 0.05, same targets as Part I → 217,579,520 trainable parameters (0.79%) |
+| batch | **8 rows per GPU × 32 GPUs = global 256**, no gradient accumulation; length-grouped sampler (`train_sampling_strategy="group_by_length"`) |
+| schedule | 1 epoch ≈ 1,788 steps, lr **2e-4** (2× Part I for the 4× larger batch), cosine, warmup 3%, AdamW, bf16, gradient checkpointing (non-reentrant) |
+| data pipeline | global rank 0 tokenizes all rows once (batched fast tokenizer, ~5 min) into `cricket/cache/tok-*.npz` (flat int32 tokens + offsets + prompt lengths, 215 MB for the 20K benchmark caches; ~1.3 GB for the full set); every rank loads it; labels = tokens with the prompt masked |
+| dev / checkpoints | fixed 1,000-row dev set; dev loss + checkpoint every 200 steps (~23 min), keep 2 |
+| resume | a second `sft-full` job (afterany) resumes from the newest checkpoint if the first stops early, and exits immediately if `train_result.json` exists |
+| chain | `sft-full` → resume-safety `sft-full` → `merge` → `eval-ft` (with `eval-base` run in parallel) → report + W&B + push |
+| reference jobs | 700715 (SFT), 700716 (resume safety), 700717 (merge), 700718 (eval-base, done: 3:07), 700719 (eval-ft + push); run `general_sa-cricket.sft-full-10060441` |
+
+### 13.4 Communication and network
+
+Per optimizer step each GPU all-reduces the LoRA gradients: 217.6 M parameters × 4 B (fp32 adapters) ≈ **0.87 GB**.
+A ring all-reduce moves ≈ 2 × (31/32) × 0.87 ≈ **1.7 GB per GPU per step**. At ≈ 7 s per step (256 rows ÷ 36.5
+rows/s) that is ≈ **0.25 GB/s per GPU**, against ≈ 200 GB/s of InfiniBand per GPU (2 × 800 Gb/s XDR) plus NVLink
+inside the node - **well under 1% of the available bandwidth**. LoRA + DDP is compute-bound; the network is not a
+factor, and the startup broadcast of the frozen 51 GB of weights is skipped (`_ddp_params_and_buffers_to_ignore`,
+every rank loads identical weights from Lustre instead). Measured values: see §13.6.
+
+### 13.5 Memory per GPU (279.5 GiB usable)
+
+| item | size |
+|---|---|
+| frozen base weights (bf16) | ≈ 51 GiB |
+| LoRA weights + grads + AdamW states (fp32: 4 + 4 + 8 B per parameter) | ≈ 3.5 GB |
+| activations with gradient checkpointing, batch 8 × up to 6,144 tokens | layer inputs kept, one layer recomputed at a time |
+| output logits + gradient for the longest batch (8 × 6,144 × 248,320 × 4 B, ×2) | up to ≈ 98 GB transient |
+| headroom | variant A fits; batch 16 or no checkpointing does not (§13.2) |
+
+### 13.6 Live measurements during training (job 700715)
+
+*To be filled in from `nvidia-smi` on all 8 nodes and InfiniBand port counters once the job is running
+(it was queued for 8 nodes at the time of writing): GPU utilization, memory used, power draw, step time, achieved
+rows/s and tokens/s, IB traffic per node.*
+
+### 13.7 Expected timeline
+
+| phase | estimate |
+|---|---|
+| queue wait for 8 nodes × 5 h | variable (hours on a busy day) |
+| model load + tokenization of 458K rows | ≈ 6 min |
+| training, 1,788 steps at ≈ 7 s | **≈ 3.4 h** |
+| merge (1 node) + eval-ft (1 node) + push | ≈ 10 min |
+
+### 13.8 How to repeat
+
+```bash
+GEN_NAME=train-full bash $C train-full                 # 8 nodes (TRAIN_NODES=..), prints all job ids and the run dir
+# throughput experiment on 1 node with any train.py flags:
+GEN_NAME=train-full EXTRA_ARGS="--max_steps 30 --train_limit 20000 --per_device_batch 8 --sampling group_by_length" bash $C bench
+```
+
+## 14. Lessons from the scale-up
+
+| lesson | detail |
+|---|---|
+| pilot every question type before a big run | two wordings (projection rate, runs/wickets scores) would otherwise have cost ~10% of 2 M samples or broken coverage |
+| make the coverage check a hard gate | `push_full_dataset.py` refuses while any source row is uncovered - it caught the 63 rows |
+| one vLLM engine per GPU is the right shape for a 27B model on 279 GiB GPUs | zero communication, ±2% throughput spread across 32 GPUs, trivially resumable |
+| size continuation jobs to the remaining work | an 8-node job for 2,448 leftover questions ran at a quarter of the normal throughput |
+| benchmark training settings on 1 node first | 5 minutes per variant found a 2.4× speed-up and exposed the two OOM settings |
+| logits dominate memory at a 248K vocabulary | batch size, not model size, is the limit for SFT on these GPUs |
+| tokenize once, share | a Lustre token cache replaces 32 parallel tokenizations of 458K rows |
