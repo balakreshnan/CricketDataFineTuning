@@ -14,6 +14,7 @@ import time
 from datetime import timedelta
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.distributed as dist
 from transformers import AutoModelForImageTextToText, AutoTokenizer, Trainer, TrainerCallback, TrainingArguments
@@ -61,6 +62,16 @@ def parse_args():
     p.add_argument("--adapter", default=None)
     p.add_argument("--deadline", type=float, default=float(os.environ.get("TRAIN_DEADLINE", 0)))
     p.add_argument("--seed", type=int, default=42)
+    # throughput / scale (full 458K-row dataset)
+    p.add_argument("--no_grad_ckpt", action="store_true", help="disable gradient checkpointing (faster, more memory)")
+    p.add_argument("--sampling", default="random", choices=["random", "group_by_length"],
+                   help="group_by_length: batches of similar length (less padding)")
+    p.add_argument("--max_steps", type=int, default=-1, help="benchmark: stop after N optimizer steps")
+    p.add_argument("--train_limit", type=int, default=0, help="benchmark: use only the first N training rows")
+    p.add_argument("--dev_rows", type=int, default=0, help="fixed dev-set size (0 = dev_frac of the data)")
+    p.add_argument("--eval_steps", type=int, default=0, help="dev-loss interval (0 = save_steps)")
+    p.add_argument("--warmup_ratio", type=float, default=0.05)
+    p.add_argument("--log_steps", type=int, default=2)
     return p.parse_args()
 
 
@@ -89,6 +100,67 @@ class JsonlLogger(TrainerCallback):
                 f.write(json.dumps({"step": state.global_step, "epoch": state.epoch, "time": time.time(), **logs}) + "\n")
 
 
+class TokDataset(torch.utils.data.Dataset):
+    """Rows stored as one flat int32 token array + offsets; labels = tokens with the prompt part masked."""
+
+    def __init__(self, ids, offs, plens, index):
+        self.ids, self.offs, self.plens, self.index = ids, offs, plens, index
+
+    def __len__(self):
+        return len(self.index)
+
+    def __getitem__(self, i):
+        j = self.index[i]
+        x = self.ids[self.offs[j]:self.offs[j + 1]].astype(np.int64)
+        y = x.copy()
+        y[: self.plens[j]] = -100
+        return {"input_ids": x, "labels": y}
+
+
+def load_tokenized(tok, train_path, max_len, limit, cache_dir):
+    """Tokenize once (global rank 0) into a cache on Lustre; every rank loads the result.
+    prompt = exact thinking-mode prompt used at generation; target = the model's own verified output + <|im_end|>."""
+    st = Path(train_path).stat()
+    key = f"{Path(train_path).parent.parent.name}-{st.st_size}-{int(st.st_mtime)}-L{max_len}-n{limit}"
+    cache = Path(cache_dir) / f"tok-{key}.npz"
+    if RANK == 0 and not cache.exists():
+        t0 = time.time()
+        ids, offs, plens, batch = [], [0], [], []
+        stats = {"dropped": 0, "rows": 0}
+
+        def flush():
+            prompts = tok([sampling.prompt_text(tok, r["messages"][:2]) for r in batch], add_special_tokens=False)["input_ids"]
+            comps = tok([r["completion_text"] + "<|im_end|>" for r in batch], add_special_tokens=False)["input_ids"]
+            for pr, co in zip(prompts, comps):
+                if len(pr) + len(co) > max_len:
+                    stats["dropped"] += 1
+                    continue
+                ids.extend(pr + co)
+                offs.append(offs[-1] + len(pr) + len(co))
+                plens.append(len(pr))
+            batch.clear()
+
+        with open(train_path, encoding="utf-8") as f:
+            for line in f:
+                if limit and stats["rows"] >= limit:
+                    break
+                batch.append(json.loads(line))
+                stats["rows"] += 1
+                if len(batch) == 4096:
+                    flush()
+        if batch:
+            flush()
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        tmp = Path(str(cache) + ".tmp.npz")
+        np.savez(tmp, ids=np.asarray(ids, dtype=np.int32), offs=np.asarray(offs, dtype=np.int64),
+                 plens=np.asarray(plens, dtype=np.int32), dropped=np.asarray([stats["dropped"]]))
+        tmp.replace(cache)
+        log(f"tokenized {stats['rows']:,} rows -> {cache} in {time.time() - t0:.0f}s")
+    dist.barrier()
+    z = np.load(cache)
+    return z["ids"], z["offs"], z["plens"], int(z["dropped"][0])
+
+
 class ListDataset(torch.utils.data.Dataset):
     def __init__(self, rows):
         self.rows = rows
@@ -108,7 +180,7 @@ def collate(pad_id):
         mask = torch.zeros((len(batch), n), dtype=torch.long)
         for i, b in enumerate(batch):
             k = len(b["input_ids"])
-            ids[i, :k], labels[i, :k], mask[i, :k] = torch.tensor(b["input_ids"]), torch.tensor(b["labels"]), 1
+            ids[i, :k], labels[i, :k], mask[i, :k] = torch.as_tensor(b["input_ids"]), torch.as_tensor(b["labels"]), 1
         return {"input_ids": ids, "attention_mask": mask, "labels": labels}
     return fn
 
@@ -169,8 +241,14 @@ def finalize(args, run_dir, use_wandb, adapter_dir):
     card = ["---", f"base_model: {args.base_model_id}", "library_name: peft", "pipeline_tag: text-generation",
             "tags: [lora, reasoning, cricket, sports-analytics]", "---", "",
             f"LoRA adapter for `{args.base_model_id}` fine-tuned on verified cricket reasoning traces (T20I ball-by-ball "
-            "situations from Valarmathy/CricketData; run-rate, chase-rate and batting-milestone questions with exact "
-            "answers). Use thinking mode (`enable_thinking=True`) with temperature 1.0, top_p 0.95, top_k 20.", ""]
+            "situations from Valarmathy/CricketData; run-rate, chase-rate, milestone, projection, strike-rate and "
+            "legal-ball questions with exact answers, distilled from the base model in thinking mode). Use thinking mode "
+            "(`enable_thinking=True`) with temperature 1.0, top_p 0.95, top_k 20.", ""]
+    if (run_dir / "train_result.json").exists():
+        tr = json.loads((run_dir / "train_result.json").read_text())
+        card.append(f"Training: {tr.get('train_rows', 0):,} rows, {tr.get('completed_epochs', 0):.2f} epochs, "
+                    f"{tr.get('global_step')} steps, global batch {tr.get('global_batch', '?')}, "
+                    f"{tr.get('world_size', '?')} Rubin GPUs, {tr.get('train_runtime', 0) / 3600:.2f} h.\n")
     if (run_dir / "report.md").exists():
         card.append((run_dir / "report.md").read_text().replace("](plots/", "](eval_report/plots/"))
     (adapter_dir / "README.md").write_text("\n".join(card) + "\n")
@@ -200,6 +278,11 @@ def main():
         (run_dir / ("config_eval_only.json" if args.eval_only else "config.json")).write_text(json.dumps(
             {**vars(args), "world_size": world, "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
              "nodes": os.environ.get("SLURM_JOB_NODELIST")}, indent=2))
+
+    if not args.eval_only and (run_dir / "train_result.json").exists():  # resume-safety job after a finished run
+        log(f"{run_dir / 'train_result.json'} exists - training already complete, nothing to do")
+        dist.destroy_process_group()
+        return
 
     use_wandb = os.environ.get("WANDB_MODE") != "disabled"
     if use_wandb and RANK == 0:
@@ -249,14 +332,17 @@ def main():
             wandb_eval("base", m)
     dist.barrier()
 
-    rows, dropped = tokenize(tok, Q.read_jsonl(Path(args.data_dir) / "train.jsonl"), args.max_len)
-    perm = torch.randperm(len(rows), generator=torch.Generator().manual_seed(args.seed)).tolist()
-    n_dev = max(1, int(len(rows) * args.dev_frac))
-    dev, train = [rows[i] for i in perm[:n_dev]], [rows[i] for i in perm[n_dev:]]
-    steps = math.ceil(math.ceil(len(train) / (args.per_device_batch * world * args.grad_accum)) * args.epochs)
-    log(f"SFT: {len(train)} train / {len(dev)} dev rows ({dropped} over {args.max_len} tokens dropped), "
-        f"global batch {args.per_device_batch * world * args.grad_accum}, {steps} steps, "
-        f"mean length {sum(len(r['input_ids']) for r in train) / len(train):.0f} tokens")
+    ids, offs, plens, dropped = load_tokenized(tok, Path(args.data_dir) / "train.jsonl", args.max_len,
+                                               args.train_limit, Path(args.croot) / "cache")
+    n_rows = len(plens)
+    perm = torch.randperm(n_rows, generator=torch.Generator().manual_seed(args.seed)).tolist()
+    n_dev = args.dev_rows or max(1, int(n_rows * args.dev_frac))
+    dev, train = TokDataset(ids, offs, plens, perm[:n_dev]), TokDataset(ids, offs, plens, perm[n_dev:])
+    gbs = args.per_device_batch * world * args.grad_accum
+    steps = args.max_steps if args.max_steps > 0 else math.ceil(math.ceil(len(train) / gbs) * args.epochs)
+    log(f"SFT: {len(train):,} train / {len(dev):,} dev rows ({dropped} over {args.max_len} tokens dropped), "
+        f"global batch {gbs}, {steps} steps, mean length {(offs[-1] / n_rows):.0f} tokens, "
+        f"grad ckpt {not args.no_grad_ckpt}, sampling {args.sampling}")
 
     model = get_peft_model(model, LoraConfig(r=args.lora_r, lora_alpha=args.lora_alpha, lora_dropout=args.lora_dropout,
                                              target_modules=_lora_targets(), task_type="CAUSAL_LM"))
@@ -267,21 +353,27 @@ def main():
         output_dir=str(out_dir), run_name=run_dir.name, num_train_epochs=args.epochs,
         per_device_train_batch_size=args.per_device_batch, per_device_eval_batch_size=args.per_device_batch,
         gradient_accumulation_steps=args.grad_accum, learning_rate=args.lr, lr_scheduler_type="cosine",
-        warmup_steps=max(1, int(0.05 * steps)), bf16=True, gradient_checkpointing=True,
+        warmup_steps=max(1, int(args.warmup_ratio * steps)), bf16=True, gradient_checkpointing=not args.no_grad_ckpt,
         gradient_checkpointing_kwargs={"use_reentrant": False}, ddp_find_unused_parameters=False,
-        logging_steps=2, logging_first_step=True, eval_strategy="steps", eval_steps=args.save_steps,
+        max_steps=args.max_steps, train_sampling_strategy=args.sampling,
+        logging_steps=args.log_steps, logging_first_step=True, eval_strategy="steps",
+        eval_steps=args.eval_steps or args.save_steps,
         save_strategy="steps", save_steps=args.save_steps, save_total_limit=args.save_total_limit,
         label_names=["labels"], remove_unused_columns=False, dataloader_num_workers=2,
         report_to=["wandb"] if use_wandb else [], seed=args.seed)
-    trainer = Trainer(model=model, args=targs, train_dataset=ListDataset(train), eval_dataset=ListDataset(dev),
+    trainer = Trainer(model=model, args=targs, train_dataset=train, eval_dataset=dev,
                       data_collator=collate(tok.pad_token_id), processing_class=tok,
                       callbacks=[DeadlineCallback(args.deadline), JsonlLogger(run_dir / "metrics.jsonl")])
-    out = trainer.train()
+    resume = any(out_dir.glob("checkpoint-*"))  # continuation job: pick up from the latest checkpoint
+    if resume:
+        log(f"resuming from the latest checkpoint in {out_dir}")
+    out = trainer.train(resume_from_checkpoint=True if resume else None)
     trainer.save_model()
     if RANK == 0:
         (run_dir / "train_result.json").write_text(json.dumps(
             {**out.metrics, "global_step": trainer.state.global_step, "completed_epochs": trainer.state.epoch,
-             "train_rows": len(train), "dev_rows": len(dev), "dropped_too_long": dropped, "adapter_dir": str(out_dir)}, indent=2))
+             "train_rows": len(train), "dev_rows": len(dev), "dropped_too_long": dropped, "adapter_dir": str(out_dir),
+             "global_batch": gbs, "world_size": world}, indent=2))
 
     if args.no_eval:
         if RANK == 0 and use_wandb:

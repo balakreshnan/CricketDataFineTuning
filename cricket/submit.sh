@@ -70,6 +70,12 @@ case "$stage" in
     jid=$(FINISH_SCRIPT=build_full_dataset.py submit_vllm retry-full "${GEN_NODES:-1}" 01:00:00 \
       "$M --questions $GD/retry.jsonl --out_dir $GD/samples --tag retry --k 8 --max_tokens 8000 --seed 1" \
       "--questions_dir $QD --out_dir $GD" 50 "$@");;
+  fix-ambiguous)  # clarify runs<=wickets scores ("1/3") in unsolved questions before a retry (tag retry2)
+    QD=$DATA_DIR/${QSET:-questions-full}; GD=$DATA_DIR/gen/${GEN_NAME:-train-full}
+    jid=$(submit fix-ambiguous 1 00:20:00 python tools/fix_ambiguous_scores.py "$QD $GD" 15 "$@");;
+  bench)        # SFT throughput benchmark on 1 node: EXTRA_ARGS = the variant's train.py flags
+    jid=$(submit sft-bench 1 00:40:00 torchrun train.py "$M --data_dir $GD/final --croot $CROOT --no_eval \
+--run_dir $CROOT/runs/bench-$(date +%m%d%H%M%S)-$RANDOM --dev_rows 64 --save_steps 100000 --log_steps 5" 35 "$@");;
   push-full)    # upload the one-to-one dataset (refuses if any source row is uncovered)
     GD=$DATA_DIR/gen/${GEN_NAME:-train-full}
     jid=$(submit push-full 1 01:00:00 python push_full_dataset.py \
@@ -86,6 +92,22 @@ case "$stage" in
     fj=$(EXTRA_ARGS= FINISH_SCRIPT=finish_eval.py submit_vllm eval-ft 1 01:00:00 "--model_dir $ck/merged $T --tag ft" \
       "--run_dir $run --adapter_dir $ck --k 4 --hub_model_id $HF_MODEL_REPO" 50 --dependency=afterok:$mj:$bj)
     echo "sft $jid -> merge $mj -> eval-ft $fj (with eval-base $bj); run dir $run";;
+  train-full)   # 1 epoch on the one-to-one dataset within the 5 h partition limit (benchmarked: batch 8/GPU, length-grouped)
+    GD=$DATA_DIR/gen/${GEN_NAME:-train-full}
+    RUN=general_sa-cricket.sft-full-$(date +%m%d%H%M); run=$CROOT/runs/$RUN; ck=$CROOT/checkpoints/$RUN
+    A="$M --data_dir $GD/final --croot $CROOT --run_dir $run --no_eval --epochs 1 --per_device_batch 8 --grad_accum 1 \
+--sampling group_by_length --lr 2e-4 --warmup_ratio 0.03 --dev_rows 1000 --save_steps 200 --save_total_limit 2 --log_steps 10"
+    N=${TRAIN_NODES:-8}
+    s1=$(submit sft-full "$N" 04:59:00 torchrun train.py "$A" 280 "$@")
+    s2=$(EXTRA_ARGS= submit sft-full "$N" 04:59:00 torchrun train.py "$A" 280 --dependency=afterany:$s1)  # resumes; no-op if done
+    T="--questions $GD/final/eval.jsonl --out_dir $run/eval $G"
+    mj=$(EXTRA_ARGS= submit merge 1 00:40:00 python merge.py "$M --adapter $ck --out $ck/merged" 35 --dependency=afterok:$s2)
+    bj=$(EXTRA_ARGS= FINISH_SCRIPT=none submit_vllm eval-base 1 01:00:00 "$M $T --tag base" "" 50)
+    fj=$(EXTRA_ARGS= FINISH_SCRIPT=finish_eval.py submit_vllm eval-ft 1 01:00:00 "--model_dir $ck/merged $T --tag ft" \
+      "--run_dir $run --adapter_dir $ck --k 4 --hub_model_id ${HF_FULL_MODEL_REPO:-${HF_MODEL_REPO/-LoRA/-Full-LoRA}}" 50 \
+      --dependency=afterok:$mj:$bj)
+    jid=$s1
+    echo "sft-full $s1 -> (resume-safety) $s2 -> merge $mj -> eval-ft $fj (with eval-base $bj); run dir $run";;
   *)
     sed -n '2,10p' "$0"; exit 1;;
 esac

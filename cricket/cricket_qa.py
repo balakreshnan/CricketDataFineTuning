@@ -211,8 +211,12 @@ def _ctx(r):
         ctx += f"{batting} are batting first. "
     else:
         ctx += f"{batting} are chasing a target of {int(r['Target Score'])} set by {bowling}. "
-    ctx += (f"After {overs(bb)} overs (cricket notation: overs.balls) they are {int(r['Innings Runs'])}/"
-            f"{int(r['Innings Wickets'])}. {r['Batter']} is on {int(r['Total Batter Runs'])} off "
+    runs, wkts = int(r["Innings Runs"]), int(r["Innings Wickets"])
+    # runs <= wickets ("1/3") also reads as wickets/runs (Australian convention): spell it out (see tools/fix_ambiguous_scores.py)
+    score = f"{runs}/{wkts}" + (f" ({runs} run{'s' if runs != 1 else ''} for the loss of {wkts} wicket{'s' if wkts != 1 else ''})"
+                                if runs <= wkts and wkts > 0 else "")
+    ctx += (f"After {overs(bb)} overs (cricket notation: overs.balls) they are {score}. "
+            f"{r['Batter']} is on {int(r['Total Batter Runs'])} off "
             f"{int(r['Batter Balls Faced'])} balls and {r['Non Striker']} is on {int(r['Total Non Striker Runs'])} off "
             f"{int(r['Non Striker Balls Faced'])}. {r['Bowler']} bowled the last delivery.")
     return ctx, batting
