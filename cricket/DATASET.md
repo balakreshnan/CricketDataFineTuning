@@ -21,7 +21,7 @@ smoke test before using it. All numbers below were measured on the file itself w
 | Format | **Men's T20 Internationals**, 20 overs per side |
 | Matches | **1,842**, every one with both innings present |
 | Dates | **2005-02-17 → 2023-08-22** (first row = the first ever men's T20I: match 211048, Australia (batting first) v New Zealand, Eden Park, won by Australia) |
-| Teams / venues | **97 teams**, **183 venues** |
+| Teams / venues | **97 team names** (12 ICC full members, 83 associates - one listed under two names - and the ICC World XI; full list in §4.2), **183 venues** |
 | People | **2,899 batters**, **2,156 bowlers** |
 | Deliveries | 408,034 legal balls + 17,085 extras that were re-bowled (wides, no-balls) |
 | Wickets | 23,659 dismissals (incl. 35 retirements) |
@@ -112,16 +112,134 @@ Coverage jumps from 2019, when the ICC granted T20I status to all member nations
 (61%) are from 2019-2023**, many between associate nations. World Cup years show as peaks (2007, 2009, 2010, 2012,
 2014, 2016, 2021, 2022). 2023 is partial (data ends 22 Aug 2023).
 
-### 4.2 Teams (97)
+### 4.2 Teams - every team in the data (97 names)
 
-Top teams by matches played: Pakistan 208, India 192, New Zealand 179, West Indies 168, Sri Lanka 168, Australia 164,
-England 162, South Africa 160, Bangladesh 142, Ireland 134, Zimbabwe 115, Afghanistan 109, Netherlands 84,
-Scotland 72, UAE 70, Kenya 60, Uganda 58, Hong Kong 56, Nepal 51, Malaysia 49, Oman 49, Germany 46, Malta 43,
-Papua New Guinea 41, Namibia 41 - the remaining 72 teams are associate members (e.g. Rwanda, Spain, Isle of Man,
-China, Thailand, Belgium, Bulgaria, Serbia, Bhutan, Maldives, Lesotho, Botswana).
+The data covers **97 team names = 95 countries / territories + 1 renamed duplicate + 1 composite side**:
 
-Most wins: Pakistan 130, India 127, New Zealand 100, South Africa 92, Australia 91, England 88, Sri Lanka 75,
-West Indies 74, Afghanistan 69, Ireland 58.
+- **12 ICC Full Members** (all present): Afghanistan, Australia, Bangladesh, England, India, Ireland, New Zealand,
+  Pakistan, South Africa, Sri Lanka, West Indies (a combined Caribbean team), Zimbabwe.
+- **84 Associate-member team names**, i.e. **83 distinct associates**: *Swaziland* (2021) and *Eswatini* (2022) are the
+  same country, renamed in 2018 - the source uses both names, so merge them if you aggregate by country.
+- **ICC World XI** - a composite exhibition side (4 matches v Pakistan / West Indies, 2017-2018), not a country.
+- Several associates are territories rather than sovereign states: Hong Kong, Cayman Islands, Bermuda, Gibraltar,
+  Cook Islands, St Helena, and the Crown Dependencies Jersey, Guernsey and Isle of Man. England and Scotland play
+  separately (no "United Kingdom" team).
+
+By ICC region (team appearances = matches counted once per side):
+
+| ICC region | teams | team appearances | teams |
+|---|---|---|---|
+| Africa | 21 | 664 | Botswana, Cameroon, Eswatini, Gambia, Ghana, Kenya, Lesotho, Malawi, Mali, Mozambique, Namibia, Nigeria, Rwanda, Seychelles, Sierra Leone, South Africa, St Helena, Swaziland, Tanzania, Uganda, Zimbabwe |
+| Americas | 9 | 281 | Argentina, Bahamas, Belize, Bermuda, Canada, Cayman Islands, Panama, United States of America, West Indies |
+| Asia | 21 | 1251 | Afghanistan, Bahrain, Bangladesh, Bhutan, China, Hong Kong, India, Iran, Kuwait, Malaysia, Maldives, Myanmar, Nepal, Oman, Pakistan, Qatar, Saudi Arabia, Singapore, Sri Lanka, Thailand, United Arab Emirates |
+| East Asia-Pacific | 11 | 452 | Australia, Cook Islands, Fiji, Indonesia, Japan, New Zealand, Papua New Guinea, Philippines, Samoa, South Korea, Vanuatu |
+| Europe | 34 | 1032 | Austria, Belgium, Bulgaria, Croatia, Cyprus, Czech Republic, Denmark, England, Estonia, Finland, France, Germany, Gibraltar, Greece, Guernsey, Hungary, Ireland, Isle of Man, Israel, Italy, Jersey, Luxembourg, Malta, Netherlands, Norway, Portugal, Romania, Scotland, Serbia, Slovenia, Spain, Sweden, Switzerland, Turkey |
+
+All teams, by matches played (`wins` from the `Winner` column; `deliveries batted` = rows where the team batted;
+first / last = calendar years of their first and last match in the data):
+
+| # | team | ICC status | ICC region | matches | wins | win % | deliveries batted | first year | last year |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | Pakistan | Full member | Asia | 208 | 130 | 62% | 24,976 | 2006 | 2023 |
+| 2 | India | Full member | Asia | 192 | 127 | 66% | 22,611 | 2006 | 2023 |
+| 3 | New Zealand | Full member | East Asia-Pacific | 179 | 100 | 56% | 20,729 | 2005 | 2023 |
+| 4 | Sri Lanka | Full member | Asia | 168 | 75 | 45% | 19,789 | 2006 | 2023 |
+| 5 | West Indies | Full member | Americas | 168 | 74 | 44% | 19,656 | 2007 | 2023 |
+| 6 | Australia | Full member | East Asia-Pacific | 164 | 91 | 55% | 18,596 | 2005 | 2022 |
+| 7 | England | Full member | Europe | 162 | 88 | 54% | 19,088 | 2005 | 2023 |
+| 8 | South Africa | Full member | Africa | 160 | 92 | 58% | 18,491 | 2005 | 2023 |
+| 9 | Bangladesh | Full member | Asia | 142 | 53 | 37% | 16,888 | 2007 | 2023 |
+| 10 | Ireland | Full member | Europe | 134 | 58 | 43% | 14,976 | 2008 | 2023 |
+| 11 | Zimbabwe | Full member | Africa | 115 | 36 | 31% | 13,774 | 2007 | 2023 |
+| 12 | Afghanistan | Full member | Asia | 109 | 69 | 63% | 12,945 | 2010 | 2023 |
+| 13 | Netherlands | Associate | Europe | 84 | 45 | 54% | 9,677 | 2008 | 2022 |
+| 14 | Scotland | Associate | Europe | 72 | 34 | 47% | 8,205 | 2007 | 2023 |
+| 15 | United Arab Emirates | Associate | Asia | 70 | 32 | 46% | 8,310 | 2014 | 2023 |
+| 16 | Kenya | Associate | Africa | 60 | 30 | 50% | 6,578 | 2007 | 2023 |
+| 17 | Uganda | Associate | Africa | 58 | 44 | 76% | 6,431 | 2019 | 2023 |
+| 18 | Hong Kong | Associate | Asia | 56 | 24 | 43% | 6,432 | 2014 | 2023 |
+| 19 | Nepal | Associate | Asia | 51 | 32 | 63% | 5,756 | 2014 | 2022 |
+| 20 | Malaysia | Associate | Asia | 49 | 29 | 59% | 5,274 | 2019 | 2023 |
+| 21 | Oman | Associate | Asia | 49 | 21 | 43% | 5,422 | 2015 | 2022 |
+| 22 | Germany | Associate | Europe | 46 | 27 | 59% | 5,034 | 2019 | 2023 |
+| 23 | Malta | Associate | Europe | 43 | 22 | 51% | 5,127 | 2021 | 2023 |
+| 24 | Namibia | Associate | Africa | 41 | 27 | 66% | 4,709 | 2019 | 2022 |
+| 25 | Papua New Guinea | Associate | East Asia-Pacific | 41 | 21 | 51% | 4,533 | 2015 | 2023 |
+| 26 | Canada | Associate | Americas | 35 | 20 | 57% | 4,064 | 2010 | 2022 |
+| 27 | Rwanda | Associate | Africa | 33 | 11 | 33% | 3,397 | 2021 | 2023 |
+| 28 | Singapore | Associate | Asia | 33 | 11 | 33% | 3,916 | 2019 | 2022 |
+| 29 | Romania | Associate | Europe | 32 | 20 | 62% | 3,653 | 2020 | 2023 |
+| 30 | Tanzania | Associate | Africa | 32 | 23 | 72% | 3,438 | 2021 | 2023 |
+| 31 | Denmark | Associate | Europe | 30 | 12 | 40% | 3,538 | 2019 | 2023 |
+| 32 | Nigeria | Associate | Africa | 30 | 12 | 40% | 3,376 | 2019 | 2022 |
+| 33 | Bahrain | Associate | Asia | 29 | 14 | 48% | 3,353 | 2020 | 2023 |
+| 34 | Gibraltar | Associate | Europe | 29 | 4 | 14% | 3,704 | 2019 | 2023 |
+| 35 | Bulgaria | Associate | Europe | 28 | 11 | 39% | 3,317 | 2020 | 2023 |
+| 36 | Jersey | Associate | Europe | 27 | 17 | 63% | 3,179 | 2019 | 2023 |
+| 37 | Botswana | Associate | Africa | 26 | 8 | 31% | 2,874 | 2019 | 2023 |
+| 38 | Luxembourg | Associate | Europe | 26 | 10 | 38% | 3,215 | 2020 | 2023 |
+| 39 | Spain | Associate | Europe | 25 | 18 | 72% | 2,551 | 2019 | 2023 |
+| 40 | Italy | Associate | Europe | 23 | 13 | 57% | 2,634 | 2019 | 2023 |
+| 41 | Austria | Associate | Europe | 22 | 12 | 55% | 2,509 | 2021 | 2023 |
+| 42 | Czech Republic | Associate | Europe | 22 | 12 | 55% | 2,721 | 2020 | 2023 |
+| 43 | Ghana | Associate | Africa | 22 | 9 | 41% | 2,554 | 2019 | 2022 |
+| 44 | Vanuatu | Associate | East Asia-Pacific | 20 | 10 | 50% | 2,225 | 2019 | 2023 |
+| 45 | Bermuda | Associate | Americas | 19 | 11 | 58% | 2,130 | 2008 | 2023 |
+| 46 | Kuwait | Associate | Asia | 19 | 11 | 58% | 2,105 | 2019 | 2023 |
+| 47 | Norway | Associate | Europe | 19 | 6 | 32% | 2,158 | 2019 | 2023 |
+| 48 | Guernsey | Associate | Europe | 18 | 11 | 61% | 2,023 | 2019 | 2023 |
+| 49 | Portugal | Associate | Europe | 18 | 14 | 78% | 2,059 | 2019 | 2023 |
+| 50 | Serbia | Associate | Europe | 18 | 7 | 39% | 2,183 | 2021 | 2023 |
+| 51 | France | Associate | Europe | 17 | 8 | 47% | 2,031 | 2021 | 2023 |
+| 52 | Thailand | Associate | Asia | 17 | 4 | 24% | 1,817 | 2019 | 2023 |
+| 53 | United States of America | Associate | Americas | 17 | 9 | 53% | 1,819 | 2019 | 2022 |
+| 54 | Hungary | Associate | Europe | 16 | 7 | 44% | 1,964 | 2021 | 2023 |
+| 55 | Sweden | Associate | Europe | 16 | 7 | 44% | 1,774 | 2021 | 2023 |
+| 56 | Belgium | Associate | Europe | 15 | 10 | 67% | 1,741 | 2020 | 2023 |
+| 57 | Finland | Associate | Europe | 15 | 7 | 47% | 1,746 | 2021 | 2023 |
+| 58 | Sierra Leone | Associate | Africa | 15 | 7 | 47% | 1,490 | 2021 | 2022 |
+| 59 | Isle of Man | Associate | Europe | 14 | 8 | 57% | 1,425 | 2020 | 2023 |
+| 60 | Maldives | Associate | Asia | 14 | 3 | 21% | 1,639 | 2019 | 2022 |
+| 61 | Qatar | Associate | Asia | 14 | 7 | 50% | 1,591 | 2019 | 2022 |
+| 62 | Switzerland | Associate | Europe | 14 | 10 | 71% | 1,480 | 2021 | 2023 |
+| 63 | Mozambique | Associate | Africa | 13 | 5 | 38% | 1,539 | 2021 | 2022 |
+| 64 | Philippines | Associate | East Asia-Pacific | 13 | 2 | 15% | 1,466 | 2019 | 2023 |
+| 65 | Bhutan | Associate | Asia | 12 | 6 | 50% | 1,427 | 2019 | 2023 |
+| 66 | Japan | Associate | East Asia-Pacific | 11 | 6 | 55% | 1,253 | 2022 | 2023 |
+| 67 | Argentina | Associate | Americas | 10 | 2 | 20% | 1,209 | 2021 | 2023 |
+| 68 | Cameroon | Associate | Africa | 10 | 0 | 0% | 1,045 | 2021 | 2022 |
+| 69 | Cayman Islands | Associate | Americas | 10 | 3 | 30% | 1,241 | 2019 | 2023 |
+| 70 | Croatia | Associate | Europe | 10 | 2 | 20% | 1,142 | 2022 | 2023 |
+| 71 | Cyprus | Associate | Europe | 10 | 5 | 50% | 1,214 | 2021 | 2022 |
+| 72 | Lesotho | Associate | Africa | 10 | 1 | 10% | 1,005 | 2021 | 2022 |
+| 73 | Saudi Arabia | Associate | Asia | 10 | 3 | 30% | 1,157 | 2020 | 2022 |
+| 74 | Bahamas | Associate | Americas | 9 | 3 | 33% | 1,108 | 2021 | 2023 |
+| 75 | Estonia | Associate | Europe | 8 | 0 | 0% | 972 | 2021 | 2022 |
+| 76 | Malawi | Associate | Africa | 8 | 5 | 62% | 833 | 2021 | 2022 |
+| 77 | Panama | Associate | Americas | 7 | 2 | 29% | 854 | 2021 | 2023 |
+| 78 | Seychelles | Associate | Africa | 7 | 2 | 29% | 775 | 2021 | 2022 |
+| 79 | Turkey | Associate | Europe | 7 | 1 | 14% | 760 | 2022 | 2023 |
+| 80 | Belize | Associate | Americas | 6 | 1 | 17% | 729 | 2021 | 2021 |
+| 81 | Gambia | Associate | Africa | 6 | 1 | 17% | 657 | 2022 | 2022 |
+| 82 | Indonesia | Associate | East Asia-Pacific | 6 | 4 | 67% | 639 | 2022 | 2022 |
+| 83 | Swaziland | Associate | Africa | 6 | 1 | 17% | 665 | 2021 | 2021 |
+| 84 | Cook Islands | Associate | East Asia-Pacific | 5 | 3 | 60% | 561 | 2022 | 2022 |
+| 85 | Eswatini | Associate | Africa | 5 | 1 | 20% | 516 | 2022 | 2022 |
+| 86 | Fiji | Associate | East Asia-Pacific | 5 | 3 | 60% | 616 | 2022 | 2022 |
+| 87 | Greece | Associate | Europe | 5 | 1 | 20% | 550 | 2021 | 2022 |
+| 88 | Samoa | Associate | East Asia-Pacific | 5 | 0 | 0% | 629 | 2022 | 2022 |
+| 89 | China | Associate | Asia | 4 | 1 | 25% | 328 | 2023 | 2023 |
+| 90 | ICC World XI | Composite (not a country) | - | 4 | 1 | 25% | 475 | 2017 | 2018 |
+| 91 | Mali | Associate | Africa | 4 | 0 | 0% | 340 | 2022 | 2022 |
+| 92 | Myanmar | Associate | Asia | 4 | 0 | 0% | 456 | 2023 | 2023 |
+| 93 | Slovenia | Associate | Europe | 4 | 0 | 0% | 458 | 2022 | 2022 |
+| 94 | Israel | Associate | Europe | 3 | 1 | 33% | 378 | 2022 | 2022 |
+| 95 | South Korea | Associate | East Asia-Pacific | 3 | 0 | 0% | 333 | 2022 | 2022 |
+| 96 | St Helena | Associate | Africa | 3 | 1 | 33% | 258 | 2022 | 2022 |
+| 97 | Iran | Associate | Asia | 1 | 0 | 0% | 131 | 2020 | 2020 |
+
+Teams with fewer than ~10 matches give very few rows (e.g. Mali, Cameroon, Iran, Saudi Arabia, St Helena); per-team
+statistics for them are noisy. The full-member sides account for 1,901 of the 3,684 team appearances.
 
 ### 4.3 Venues (183)
 
