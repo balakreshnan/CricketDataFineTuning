@@ -96,12 +96,19 @@ case "$stage" in
     GD=$DATA_DIR/gen/${GEN_NAME:-train-full}
     RUN=general_sa-cricket.sft-full-$(date +%m%d%H%M); run=$CROOT/runs/$RUN; ck=$CROOT/checkpoints/$RUN
     A="$M --data_dir $GD/final --croot $CROOT --run_dir $run --no_eval --epochs 1 --per_device_batch 8 --grad_accum 1 \
---sampling group_by_length --lr 2e-4 --warmup_ratio 0.03 --dev_rows 1000 --save_steps 200 --save_total_limit 2 --log_steps 10"
-    N=${TRAIN_NODES:-8}
-    s1=$(submit sft-full "$N" 04:59:00 torchrun train.py "$A" 280 "$@")
-    s2=$(EXTRA_ARGS= submit sft-full "$N" 04:59:00 torchrun train.py "$A" 280 --dependency=afterany:$s1)  # resumes; no-op if done
+--sampling group_by_length --lr 2e-4 --warmup_ratio 0.03 --dev_rows 1000 --save_steps ${SAVE_STEPS:-200} --save_total_limit 2 --log_steps 10"
+    # TRAIN_PARTITION=backfill-xdr (8 h limit, preemptible: PreemptMode=CANCEL) -> TRAIN_TIME=07:59:00 TRAIN_MIN=450 SAVE_STEPS=100
+    N=${TRAIN_NODES:-8}; TP=--partition=${TRAIN_PARTITION:-$PARTITION}; TT=${TRAIN_TIME:-04:59:00}; TM=${TRAIN_MIN:-280}
+    # chunked: TRAIN_CHUNKS jobs in a row; each resumes from the newest checkpoint (the deadline callback saves one
+    # before the time limit) and exits at once if training is already done. Short jobs schedule far more easily.
+    s1=$(submit sft-full "$N" "$TT" torchrun train.py "$A" "$TM" "$TP" "$@")
+    s3=$s1; s2=""
+    for _ in $(seq 2 "${TRAIN_CHUNKS:-3}"); do
+      s3=$(EXTRA_ARGS= submit sft-full "$N" "$TT" torchrun train.py "$A" "$TM" "$TP" --dependency=afterany:$s3)
+      s2="$s2 -> $s3"
+    done
     T="--questions $GD/final/eval.jsonl --out_dir $run/eval $G"
-    mj=$(EXTRA_ARGS= submit merge 1 00:40:00 python merge.py "$M --adapter $ck --out $ck/merged" 35 --dependency=afterok:$s2)
+    mj=$(EXTRA_ARGS= submit merge 1 00:40:00 python merge.py "$M --adapter $ck --out $ck/merged" 35 --dependency=afterok:$s3)
     bj=$(EXTRA_ARGS= FINISH_SCRIPT=none submit_vllm eval-base 1 01:00:00 "$M $T --tag base" "" 50)
     fj=$(EXTRA_ARGS= FINISH_SCRIPT=finish_eval.py submit_vllm eval-ft 1 01:00:00 "--model_dir $ck/merged $T --tag ft" \
       "--run_dir $run --adapter_dir $ck --k 4 --hub_model_id ${HF_FULL_MODEL_REPO:-${HF_MODEL_REPO/-LoRA/-Full-LoRA}}" 50 \

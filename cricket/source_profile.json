@@ -1,0 +1,581 @@
+{
+ "profile": {
+  "null_counts": {
+   "Method": 401460,
+   "Player Out": 401460,
+   "Runs to Get": 224815,
+   "Player Out Runs": 401460,
+   "Player Out Balls Faced": 401460
+  },
+  "innings_per_match": {
+   "1+2": 1842
+  },
+  "matches_target_not_first_innings_plus_1": 68,
+  "matches_without_second_innings": 0,
+  "matches_where_winner_disagrees_with_chased_flag": 0,
+  "matches_per_year": {
+   "2005": 3,
+   "2006": 7,
+   "2007": 35,
+   "2008": 14,
+   "2009": 47,
+   "2010": 59,
+   "2011": 21,
+   "2012": 71,
+   "2013": 50,
+   "2014": 47,
+   "2015": 52,
+   "2016": 95,
+   "2017": 63,
+   "2018": 77,
+   "2019": 205,
+   "2020": 69,
+   "2021": 297,
+   "2022": 446,
+   "2023": 184
+  },
+  "rows_per_year": {
+   "2005": 693,
+   "2006": 1617,
+   "2007": 8236,
+   "2008": 3100,
+   "2009": 11018,
+   "2010": 13634,
+   "2011": 5036,
+   "2012": 16370,
+   "2013": 11867,
+   "2014": 10575,
+   "2015": 12415,
+   "2016": 22127,
+   "2017": 14416,
+   "2018": 18012,
+   "2019": 47365,
+   "2020": 15964,
+   "2021": 68426,
+   "2022": 102581,
+   "2023": 41667
+  },
+  "teams": 97,
+  "top_teams_by_matches": [
+   [
+    "Pakistan",
+    208
+   ],
+   [
+    "India",
+    192
+   ],
+   [
+    "New Zealand",
+    179
+   ],
+   [
+    "West Indies",
+    168
+   ],
+   [
+    "Sri Lanka",
+    168
+   ],
+   [
+    "Australia",
+    164
+   ],
+   [
+    "England",
+    162
+   ],
+   [
+    "South Africa",
+    160
+   ],
+   [
+    "Bangladesh",
+    142
+   ],
+   [
+    "Ireland",
+    134
+   ],
+   [
+    "Zimbabwe",
+    115
+   ],
+   [
+    "Afghanistan",
+    109
+   ],
+   [
+    "Netherlands",
+    84
+   ],
+   [
+    "Scotland",
+    72
+   ],
+   [
+    "United Arab Emirates",
+    70
+   ],
+   [
+    "Kenya",
+    60
+   ],
+   [
+    "Uganda",
+    58
+   ],
+   [
+    "Hong Kong",
+    56
+   ],
+   [
+    "Nepal",
+    51
+   ],
+   [
+    "Malaysia",
+    49
+   ],
+   [
+    "Oman",
+    49
+   ],
+   [
+    "Germany",
+    46
+   ],
+   [
+    "Malta",
+    43
+   ],
+   [
+    "Papua New Guinea",
+    41
+   ],
+   [
+    "Namibia",
+    41
+   ]
+  ],
+  "venues": 183,
+  "top_venues": [
+   [
+    "Dubai International Cricket Stadium",
+    88
+   ],
+   [
+    "Al Amerat Cricket Ground Oman Cricket (Ministry Turf 1)",
+    64
+   ],
+   [
+    "Shere Bangla National Stadium",
+    53
+   ],
+   [
+    "Gahanga International Cricket Stadium. Rwanda",
+    49
+   ],
+   [
+    "Marsa Sports Club",
+    48
+   ],
+   [
+    "Sheikh Zayed Stadium",
+    44
+   ],
+   [
+    "Harare Sports Club",
+    38
+   ],
+   [
+    "R Premadasa Stadium",
+    33
+   ],
+   [
+    "Integrated Polytechnic Regional Centre",
+    33
+   ],
+   [
+    "Sharjah Cricket Stadium",
+    31
+   ],
+   [
+    "Desert Springs Cricket Ground",
+    29
+   ],
+   [
+    "ICC Academy",
+    28
+   ],
+   [
+    "Kerava National Cricket Ground",
+    27
+   ],
+   [
+    "New Wanderers Stadium",
+    24
+   ],
+   [
+    "Gymkhana Club Ground",
+    23
+   ]
+  ],
+  "winner_values": 89,
+  "top_winners": [
+   [
+    "Pakistan",
+    130
+   ],
+   [
+    "India",
+    127
+   ],
+   [
+    "New Zealand",
+    100
+   ],
+   [
+    "South Africa",
+    92
+   ],
+   [
+    "Australia",
+    91
+   ],
+   [
+    "England",
+    88
+   ],
+   [
+    "Sri Lanka",
+    75
+   ],
+   [
+    "West Indies",
+    74
+   ],
+   [
+    "Afghanistan",
+    69
+   ],
+   [
+    "Ireland",
+    58
+   ],
+   [
+    "Bangladesh",
+    53
+   ],
+   [
+    "Netherlands",
+    45
+   ],
+   [
+    "Uganda",
+    44
+   ],
+   [
+    "Zimbabwe",
+    36
+   ],
+   [
+    "Scotland",
+    34
+   ]
+  ],
+  "chased_successfully": {
+   "1": 928,
+   "0": 914
+  },
+  "rows_per_innings": {
+   "1": 224815,
+   "2": 200304
+  },
+  "valid_ball": {
+   "1": 408034,
+   "0": 17085
+  },
+  "extra_types": {
+   "[]": 399765,
+   "['wides']": 15246,
+   "['legbyes']": 6631,
+   "['noballs']": 1775,
+   "['byes']": 1631,
+   "['byes', 'noballs']": 47,
+   "['legbyes', 'noballs']": 11,
+   "['penalty']": 7,
+   "['noballs', 'byes']": 5,
+   "['noballs', 'penalty']": 1
+  },
+  "ball_rebowled": {
+   "0": 408034,
+   "1": 17085
+  },
+  "wickets": 23659,
+  "dismissal_methods": {
+   "caught": 13378,
+   "bowled": 4917,
+   "run out": 1997,
+   "lbw": 1824,
+   "stumped": 796,
+   "caught and bowled": 685,
+   "retired hurt": 27,
+   "hit wicket": 24,
+   "retired not out": 5,
+   "retired out": 3,
+   "obstructing the field": 2,
+   "hit the ball twice": 1
+  },
+  "runs_from_ball": {
+   "0": 160394,
+   "1": 170365,
+   "2": 32230,
+   "3": 2392,
+   "4": 41659,
+   "5": 860,
+   "6": 17107,
+   "7": 111,
+   "8": 1
+  },
+  "batter_runs": {
+   "0": 184757,
+   "1": 149518,
+   "2": 30469,
+   "3": 2034,
+   "4": 41055,
+   "5": 72,
+   "6": 17212,
+   "7": 2
+  },
+  "balls_remaining_range": [
+   -1,
+   120
+  ],
+  "rows_balls_remaining_negative": 8,
+  "batters": 2899,
+  "bowlers": 2156,
+  "top_batters_by_balls_faced": [
+   [
+    "V Kohli",
+    2719
+   ],
+   [
+    "Babar Azam",
+    2676
+   ],
+   [
+    "RG Sharma",
+    2596
+   ],
+   [
+    "MJ Guptill",
+    2441
+   ],
+   [
+    "PR Stirling",
+    2323
+   ],
+   [
+    "Mohammad Rizwan",
+    2141
+   ],
+   [
+    "AJ Finch",
+    2075
+   ],
+   [
+    "DA Warner",
+    1952
+   ],
+   [
+    "Mohammad Hafeez",
+    1952
+   ],
+   [
+    "KS Williamson",
+    1858
+   ]
+  ],
+  "top_bowlers_by_legal_balls": [
+   [
+    "Shakib Al Hasan",
+    2373
+   ],
+   [
+    "TG Southee",
+    2207
+   ],
+   [
+    "Shahid Afridi",
+    2039
+   ],
+   [
+    "IS Sodhi",
+    1945
+   ],
+   [
+    "Mohammad Nabi",
+    1930
+   ],
+   [
+    "AU Rashid",
+    1928
+   ],
+   [
+    "Shadab Khan",
+    1903
+   ],
+   [
+    "Rashid Khan",
+    1874
+   ],
+   [
+    "Mustafizur Rahman",
+    1816
+   ],
+   [
+    "MJ Santner",
+    1712
+   ]
+  ],
+  "first_innings_total": {
+   "min": 10,
+   "median": 152.0,
+   "mean": 150.6,
+   "max": 278
+  },
+  "second_innings_total": {
+   "min": 13,
+   "median": 132.0,
+   "mean": 129.8,
+   "max": 259
+  },
+  "first_innings_full_20_overs": 1540,
+  "all_out_innings": 639,
+  "highest_totals": [
+   "Afghanistan 278 v Ireland, Rajiv Gandhi International Cricket Stadium, 2019-02-23 (match 1168113, inn 1)",
+   "Australia 263 v Sri Lanka, Pallekele International Cricket Stadium, 2016-09-06 (match 995467, inn 1)",
+   "Sri Lanka 260 v Kenya, New Wanderers Stadium, 2007-09-14 (match 287860, inn 1)",
+   "India 260 v Sri Lanka, Holkar Cricket Stadium, 2017-12-22 (match 1122730, inn 1)",
+   "South Africa 259 v West Indies, SuperSport Park, 2023-03-26 (match 1339605, inn 2)"
+  ],
+  "lowest_completed_totals": [
+   "Isle of Man 10 v Spain, La Manga Club Bottom Ground, 2023-02-26 (match 1354803, inn 1)",
+   "China 23 v Malaysia, Bayuemas Oval, 2023-07-26 (match 1383101, inn 1)",
+   "Lesotho 26 v Uganda, Integrated Polytechnic Regional Centre, 2021-10-19 (match 1283030, inn 1)",
+   "China 26 v Thailand, Bayuemas Oval, 2023-07-27 (match 1383103, inn 1)",
+   "Thailand 30 v Malaysia, UKM-YSD Cricket Oval, 2022-07-04 (match 1322001, inn 1)"
+  ],
+  "rows_per_match": {
+   "min": 53,
+   "median": 242.0,
+   "max": 275
+  },
+  "sample_match": {
+   "Match ID": "1339605",
+   "Date": "2023-03-26",
+   "Venue": "SuperSport Park",
+   "Bat First": "West Indies",
+   "Bat Second": "South Africa",
+   "Winner": "South Africa"
+  }
+ },
+ "checks": {
+  "row_count": {
+   "ok": true,
+   "hard": true,
+   "detail": "425,119 rows (expected 425,119)"
+  },
+  "columns": {
+   "ok": true,
+   "hard": true,
+   "detail": "35 columns; first column header is '' (pandas index)"
+  },
+  "match_count": {
+   "ok": true,
+   "hard": true,
+   "detail": "1,842 matches"
+  },
+  "date_range": {
+   "ok": true,
+   "hard": true,
+   "detail": "2005-02-17 -> 2023-08-22"
+  },
+  "row_index_unique": {
+   "ok": true,
+   "hard": true,
+   "detail": "unnamed index column: 425,119 distinct, min 0, max 425118"
+  },
+  "match_constant_columns": {
+   "ok": true,
+   "hard": true,
+   "detail": "columns not constant within a match: none"
+  },
+  "runs_from_ball_eq_batter_plus_extra": {
+   "ok": true,
+   "hard": true,
+   "detail": "0 violating rows"
+  },
+  "innings_runs_cumulative": {
+   "ok": true,
+   "hard": true,
+   "detail": "0 violating rows"
+  },
+  "innings_wickets_cumulative": {
+   "ok": true,
+   "hard": true,
+   "detail": "0 violating rows"
+  },
+  "balls_remaining_eq_120_minus_legal": {
+   "ok": true,
+   "hard": false,
+   "detail": "0 violating rows"
+  },
+  "valid_ball_iff_not_wide_or_noball": {
+   "ok": true,
+   "hard": true,
+   "detail": "0 violating rows"
+  },
+  "wicket_has_method_and_player": {
+   "ok": true,
+   "hard": true,
+   "detail": "0 violating rows"
+  },
+  "runs_to_get_eq_target_minus_runs": {
+   "ok": true,
+   "hard": true,
+   "detail": "0 violating rows"
+  },
+  "total_batter_runs_cumulative": {
+   "ok": false,
+   "hard": false,
+   "detail": "19,906 violating rows; e.g. row 2 (match 1339605 inn 1 1.3), row 62 (match 1339605 inn 1 11.1), row 65 (match 1339605 inn 1 11.4)"
+  },
+  "batter_balls_faced_cumulative": {
+   "ok": false,
+   "hard": false,
+   "detail": "106,585 violating rows; e.g. row 2 (match 1339605 inn 1 1.3), row 62 (match 1339605 inn 1 11.1), row 65 (match 1339605 inn 1 11.4)"
+  },
+  "rows_ordered_by_over_ball": {
+   "ok": true,
+   "hard": false,
+   "detail": "0 violating rows"
+  },
+  "over_in_1_20": {
+   "ok": true,
+   "hard": false,
+   "detail": "0 violating rows"
+  },
+  "target_eq_first_innings_total_plus_1": {
+   "ok": true,
+   "hard": false,
+   "detail": "68 matches with a revised (rain/DLS) target - expected 68; excluded from target-based questions"
+  },
+  "chased_flag_matches_scores": {
+   "ok": false,
+   "hard": false,
+   "detail": "1 non-revised matches where Chased Successfully disagrees with the scores"
+  }
+ }
+}

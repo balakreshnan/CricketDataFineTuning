@@ -9,6 +9,9 @@ layout and every file involved, so the run can be repeated or modified.
 
 Reference run: **2026-10-05**, SFT job `696652`, user `bbalakreshna`, account `general_sa`, partition `batch-xdr`.
 
+The source data itself (columns, matches, years, teams, quirks, validation and smoke tests) is documented in
+[`DATASET.md`](DATASET.md); `tools/validate_source.py` re-runs those checks.
+
 **Part I (§1–§11)** documents the reference pipeline: 1,500 sampled source rows → 4,500 reasoning rows → LoRA on 16 GPUs.
 **Part II (§12–§14)** documents the scale-up: **every one of the 425,119 source rows** → **500,000 reasoning rows**
 distilled with **vLLM on 32 Rubin GPUs** (1.58 B generated tokens), and a **1-epoch fine-tune on 32 GPUs** within the
@@ -621,11 +624,26 @@ every rank loads identical weights from Lustre instead). Measured values: see §
 | output logits + gradient for the longest batch (8 × 6,144 × 248,320 × 4 B, ×2) | up to ≈ 98 GB transient |
 | headroom | variant A fits; batch 16 or no checkpointing does not (§13.2) |
 
-### 13.6 Live measurements during training (job 700715)
+### 13.6 Live measurements during training
 
-*To be filled in from `nvidia-smi` on all 8 nodes and InfiniBand port counters once the job is running
-(it was queued for 8 nodes at the time of writing): GPU utilization, memory used, power draw, step time, achieved
-rows/s and tokens/s, IB traffic per node.*
+*Not yet run.* On 2026-10-06 the cluster could not schedule the job: a `fwupdates` firmware-update reservation took
+144 nodes out of service (all `maint` nodes on batch-xdr and the idle ones on batch-spx), leaving ~140 batch-xdr nodes
+against ~7,000 queued node requests ahead of ours (rank ≈ 380, priority ≈ 44,600, mostly fair-share). The chain was
+tried as one 8-node × 5 h job (batch-xdr), 8 nodes × 8 h (backfill-xdr, preemptible), and 8-node × 2 h chunks on
+`batch-xdr,batch-spx`, then cancelled by the user, to be rerun after the maintenance (planned: Thursday 2026-10-08).
+
+To rerun (chunked, starts on whichever partition has room first):
+
+```bash
+PARTITION=batch-xdr,batch-spx GEN_NAME=train-full TRAIN_TIME=02:00:00 TRAIN_MIN=105 TRAIN_CHUNKS=4 SAVE_STEPS=100 \
+  bash $C train-full
+bash .../code/cricket/tools/measure_job.sh <sft job id> 60     # ~20 min into training: GPU util/mem/power + IB traffic, all nodes
+```
+
+Scheduling notes: `squeue -j <job> --start` and `sprio -j <job>` show the plan and priority; the number of jobs ahead
+and the nodes they want: `squeue -p batch-xdr -t PD -h -o "%Q %D" | awk -v p=<prio> '$1>p{n++;d+=$2}END{print n,d}'`;
+`scontrol show reservation` shows maintenance windows. `backfill-xdr` (8 h) is preemptible (`PreemptMode=CANCEL`,
+lower tier) - only use it with frequent checkpoints and resume jobs.
 
 ### 13.7 Expected timeline
 
