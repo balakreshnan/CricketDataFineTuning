@@ -10,7 +10,8 @@ layout and every file involved, so the run can be repeated or modified.
 Reference run: **2026-10-05**, SFT job `696652`, user `bbalakreshna`, account `general_sa`, partition `batch-xdr`.
 
 The source data itself (columns, matches, years, teams, quirks, validation and smoke tests) is documented in
-[`DATASET.md`](DATASET.md); `tools/validate_source.py` re-runs those checks.
+[`DATASET.md`](DATASET.md); `tools/validate_source.py` re-runs those checks. The system design, flowcharts of the
+distillation, training and evaluation stages, and the validation strategy are in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 **Part I (§1–§11)** documents the reference pipeline: 1,500 sampled source rows → 4,500 reasoning rows → LoRA on 16 GPUs.
 **Part II (§12–§14)** documents the scale-up: **every one of the 425,119 source rows** → **500,000 reasoning rows**
@@ -626,7 +627,28 @@ every rank loads identical weights from Lustre instead). Measured values: see §
 
 ### 13.6 Live measurements during training
 
-*Not yet run.* On 2026-10-06 the cluster could not schedule the job: a `fwupdates` firmware-update reservation took
+**Running since 2026-10-07 05:58** - chunk 1 (job 711070) on 8 `batch-spx` nodes (hecate0325, 0328, 0334,
+0336-0338, 0340, 0341; all in NVLink block 19), run dir `runs/general_sa-cricket.sft-full-10070553`. Measured ~20 min
+into training with `tools/measure_job.sh` and `tools/net_sample.sh`:
+
+| quantity | measured |
+|---|---|
+| token cache (rank 0) | 458,702 rows tokenized in 377 s → 457,689 train + 1,000 dev rows (13 over 6,144 tokens dropped), mean 686 tokens |
+| step time | ≈ 12.5-13 s per 256-row step → ≈ 0.62 rows/s per GPU (1-node benchmark: 1.14) |
+| projected training | 1,788 steps ≈ **6.2 h** → 12 chained 1-hour chunks (≈ 220 steps each); `tools/extend_chain.sh` added 5 chunks and re-pointed the merge |
+| GPU utilization | 49-72% (mean ≈ 58%) |
+| GPU memory | 129-277 GiB of 279.5 GiB, varying with the length group |
+| GPU power / SM clock | 630-760 W of a 2,300 W limit; 2,415-2,419 MHz (max) |
+| RDMA ports (IB / Ethernet) | 0 GB/s - on spx nodes the RDMA NICs are Ethernet (Spectrum-X) and stay idle |
+| NVLink | ≈ 8.3 GB/s transmit per GPU: NCCL all-reduces over the **multi-node NVLink** fabric |
+| loss | train 0.315-0.323 from the start (self-distilled targets), dev 0.326 at step 100 |
+
+Two findings from the live run: (1) a deadline-stopped chunk used to write `train_result.json`, which the completion
+guard read as "done" - fixed before chunk 1's deadline (now `train_progress.json` until the epoch is finished, and the
+guard checks `finished`); (2) the multi-node step is ~1.8× slower than the single-node benchmark and NVLink traffic is
+far above the expected LoRA all-reduce volume (≈ 0.14 GB/s) - to be profiled (ARCHITECTURE.md §4.4).
+
+Earlier, on 2026-10-06, the cluster could not schedule the job: a `fwupdates` firmware-update reservation took
 144 nodes out of service (all `maint` nodes on batch-xdr and the idle ones on batch-spx), leaving ~140 batch-xdr nodes
 against ~7,000 queued node requests ahead of ours (rank ≈ 380, priority ≈ 44,600, mostly fair-share). The chain was
 tried as one 8-node × 5 h job (batch-xdr), 8 nodes × 8 h (backfill-xdr, preemptible), and 8-node × 2 h chunks on

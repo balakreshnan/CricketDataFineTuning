@@ -279,10 +279,15 @@ def main():
             {**vars(args), "world_size": world, "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
              "nodes": os.environ.get("SLURM_JOB_NODELIST")}, indent=2))
 
-    if not args.eval_only and (run_dir / "train_result.json").exists():  # resume-safety job after a finished run
-        log(f"{run_dir / 'train_result.json'} exists - training already complete, nothing to do")
-        dist.destroy_process_group()
-        return
+    done_file = run_dir / "train_result.json"
+    if not args.eval_only and done_file.exists():  # resume-safety job after a finished run
+        tr = json.loads(done_file.read_text())
+        # older files have no "finished" key: complete only if a whole epoch was reached
+        if tr.get("finished", tr.get("completed_epochs", 0) >= args.epochs - 1e-6):
+            log(f"{done_file} says training is complete - nothing to do")
+            dist.destroy_process_group()
+            return
+        log(f"{done_file} is from an interrupted chunk (epoch {tr.get('completed_epochs', 0):.3f}) - resuming")
 
     use_wandb = os.environ.get("WANDB_MODE") != "disabled"
     if use_wandb and RANK == 0:
@@ -369,11 +374,20 @@ def main():
         log(f"resuming from the latest checkpoint in {out_dir}")
     out = trainer.train(resume_from_checkpoint=True if resume else None)
     trainer.save_model()
+    finished = trainer.state.global_step >= steps  # False when the deadline callback stopped this chunk early
     if RANK == 0:
-        (run_dir / "train_result.json").write_text(json.dumps(
-            {**out.metrics, "global_step": trainer.state.global_step, "completed_epochs": trainer.state.epoch,
-             "train_rows": len(train), "dev_rows": len(dev), "dropped_too_long": dropped, "adapter_dir": str(out_dir),
-             "global_batch": gbs, "world_size": world}, indent=2))
+        (run_dir / ("train_result.json" if finished else "train_progress.json")).write_text(json.dumps(
+            {**out.metrics, "global_step": trainer.state.global_step, "planned_steps": steps, "finished": finished,
+             "completed_epochs": trainer.state.epoch, "train_rows": len(train), "dev_rows": len(dev),
+             "dropped_too_long": dropped, "adapter_dir": str(out_dir), "global_batch": gbs, "world_size": world}, indent=2))
+    if not finished:
+        log(f"stopped at step {trainer.state.global_step}/{steps} (deadline) - the next chunk resumes from the checkpoint")
+        if RANK == 0 and use_wandb:
+            import wandb
+            wandb.finish()
+        dist.barrier()
+        dist.destroy_process_group()
+        return
 
     if args.no_eval:
         if RANK == 0 and use_wandb:
