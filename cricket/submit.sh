@@ -115,6 +115,19 @@ case "$stage" in
       --dependency=afterok:$mj:$bj)
     jid=$s1
     echo "sft-full $s1 -> (resume-safety) $s2 -> merge $mj -> eval-ft $fj (with eval-base $bj); run dir $run";;
+  finish-full)  # merge + eval-ft + push for an existing train-full run:  RUN=<run name> AFTER=<last chunk job> bash submit.sh finish-full
+    GD=$DATA_DIR/gen/${GEN_NAME:-train-full}
+    run=$CROOT/runs/${RUN:?set RUN=general_sa-cricket.sft-full-...}; ck=$CROOT/checkpoints/$RUN
+    T="--questions $GD/final/eval.jsonl --out_dir $run/eval $G"
+    dep=(); [[ -n "${AFTER:-}" ]] && dep=(--dependency=afterok:$AFTER)
+    mj=$(EXTRA_ARGS= submit merge 1 00:40:00 python merge.py "$M --adapter $ck --out $ck/merged" 35 "${dep[@]}")
+    if ls "$run"/eval/base_rank*.jsonl >/dev/null 2>&1; then bdep=""; else
+      bj=$(EXTRA_ARGS= FINISH_SCRIPT=none submit_vllm eval-base 1 01:00:00 "$M $T --tag base" "" 50); bdep=":$bj"; fi
+    fj=$(EXTRA_ARGS= FINISH_SCRIPT=finish_eval.py submit_vllm eval-ft 1 01:00:00 "--model_dir $ck/merged $T --tag ft" \
+      "--run_dir $run --adapter_dir $ck --k 4 --hub_model_id ${HF_FULL_MODEL_REPO:-${HF_MODEL_REPO/-LoRA/-Full-LoRA}}" 50 \
+      --dependency=afterok:$mj$bdep)
+    jid=$fj
+    echo "merge $mj -> eval-ft $fj${bdep:+ (and eval-base ${bdep#:})}; run dir $run";;
   *)
     sed -n '2,10p' "$0"; exit 1;;
 esac
