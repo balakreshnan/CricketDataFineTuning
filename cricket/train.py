@@ -41,6 +41,7 @@ def parse_args():
     p.add_argument("--hub_model_id", default=None)
     p.add_argument("--hub_revision", default=None)
     p.add_argument("--base_model_id", default="Qwen/Qwen3.8-27B")
+    p.add_argument("--push_merged", action="store_true", help="also upload the merged full model (merged/, ~55 GB)")
     p.add_argument("--epochs", type=float, default=2)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--per_device_batch", type=int, default=2)
@@ -257,7 +258,7 @@ def finalize(args, run_dir, use_wandb, adapter_dir):
     if args.hub_revision:
         api.create_branch(args.hub_model_id, branch=args.hub_revision, exist_ok=True)
     api.upload_folder(repo_id=args.hub_model_id, folder_path=str(adapter_dir), revision=args.hub_revision,
-                      ignore_patterns=["checkpoint-*", "checkpoint-*/**"], commit_message=f"LoRA adapter, run {run_dir.name}")
+                      ignore_patterns=["checkpoint-*", "checkpoint-*/**"] + ([] if getattr(args, "push_merged", False) else ["merged/*", "merged/**"]), commit_message=f"LoRA adapter, run {run_dir.name}")
     api.upload_folder(repo_id=args.hub_model_id, folder_path=str(run_dir), path_in_repo="eval_report",
                       revision=args.hub_revision,
                       allow_patterns=["report.md", "comparison.json", "config.json", "train_result.json", "metrics.jsonl",

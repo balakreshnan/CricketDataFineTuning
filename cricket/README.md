@@ -16,7 +16,9 @@ distillation, training and evaluation stages, and the validation strategy are in
 **Part I (§1–§11)** documents the reference pipeline: 1,500 sampled source rows → 4,500 reasoning rows → LoRA on 16 GPUs.
 **Part II (§12–§14)** documents the scale-up: **every one of the 425,119 source rows** → **500,000 reasoning rows**
 distilled with **vLLM on 32 Rubin GPUs** (1.58 B generated tokens), and a **1-epoch fine-tune on 32 GPUs** within the
-5-hour partition limit, including hardware, memory, network and GPU-efficiency measurements.
+5-hour partition limit, including hardware, memory, network and GPU-efficiency measurements. Outcome: the 500K adapter
+reaches **97.88%** on the 600-question benchmark (base 97.29%, 4.5K adapter 97.04%) with **39% fewer reasoning
+tokens** and no truncated answers (§13.7).
 
 ## Published artifacts (public on Hugging Face)
 
@@ -24,11 +26,15 @@ distilled with **vLLM on 32 Rubin GPUs** (1.58 B generated tokens), and a **1-ep
 |---|---|---|---|
 | **Reasoning dataset** | [Balab2021/CricketData-T20-Reasoning-Qwen3.8](https://huggingface.co/datasets/Balab2021/CricketData-T20-Reasoning-Qwen3.8) | `data/train.jsonl` (4,500 verified reasoning rows, 3 per source delivery), `data/test.jsonl` (600 held-out questions with gold answers), `stats.json`, dataset card; license CC0-1.0 (as the source data) | `efa295283fc9b2a012b9fa06a77bf393e35de212` |
 | **Full one-to-one reasoning dataset** (Part II) | [Balab2021/CricketData-T20-Reasoning-Qwen3.8-Full](https://huggingface.co/datasets/Balab2021/CricketData-T20-Reasoning-Qwen3.8-Full) | 500,000 verified rows covering all 425,119 source rows: `data/train-0000{0..4}.jsonl` (458,702), `data/test-00000.jsonl` (41,298, held-out matches), `data/eval-00000.jsonl` (the fixed 600-question benchmark), `stats.json`, card; 2.08 GB | `ad669766ef046c8ccc5330d077c77118b692ec00` |
-| **Fine-tuned reasoning LoRA, full dataset** (Part II) | [Balab2021/Qwen3.8-27B-Cricket-Reasoning-Full-LoRA](https://huggingface.co/Balab2021/Qwen3.8-27B-Cricket-Reasoning-Full-LoRA) | pushed automatically by the `train-full` chain when training and evals finish (§13) | - |
-| **Fine-tuned reasoning LoRA** | [Balab2021/Qwen3.8-27B-Cricket-Reasoning-LoRA](https://huggingface.co/Balab2021/Qwen3.8-27B-Cricket-Reasoning-LoRA) | `adapter_model.safetensors` + `adapter_config.json` (LoRA r32/α64 on `Qwen/Qwen3.8-27B`), tokenizer files and chat template, model card with the results, `eval_report/` (report.md, base/ft eval summaries, comparison.json, training metrics, plots) | `40af7e4f6122ac69372d7fa36a0a00f0202ad761` |
+| **Fine-tuned reasoning LoRA, full dataset** (Part II) | [Balab2021/Qwen3.8-27B-Cricket-Reasoning-Full-LoRA](https://huggingface.co/Balab2021/Qwen3.8-27B-Cricket-Reasoning-Full-LoRA) | LoRA r32/α64 adapter trained 1 epoch on all 457,689 training rows (32 GPUs), tokenizer files and chat template, model card with results (§13.7), `eval_report/`, `merged/` (full merged bf16 model, 12 shards, 54.7 GB - loads in vLLM without PEFT); pushed 2026-10-07 16:14 by job 711525, made public by the owner | `5f21ce653ee676011e0ebaa2477a08dab750c837` |
+| **Fine-tuned reasoning LoRA** | [Balab2021/Qwen3.8-27B-Cricket-Reasoning-LoRA](https://huggingface.co/Balab2021/Qwen3.8-27B-Cricket-Reasoning-LoRA) | `adapter_model.safetensors` + `adapter_config.json` (LoRA r32/α64 on `Qwen/Qwen3.8-27B`), tokenizer files and chat template, model card with the results, `eval_report/` (report.md, base/ft eval summaries, comparison.json, training metrics, plots), `merged/` (54.7 GB) | `40af7e4f6122ac69372d7fa36a0a00f0202ad761` |
 
-Both repos were created private by the pipeline and made **public** by the owner after review (verified 2026-10-05:
-`private: false`, not gated). Re-running `push-dataset` / `train` uploads new commits to the same repos without
+All four repos were created private by the pipeline and made **public** by the owner after review (verified
+2026-10-05 for Part I and 2026-10-07 for Part II: `private: false`, not gated). Both model repos also contain a
+`merged/` folder (the merged full model, 54.7 GB) because `merge.py` writes it inside the adapter folder and the
+upload did not exclude it; `train.py` / `finish_eval.py` now skip `merged/` unless `--push_merged` is given.
+**The fine-tuned model - links, prompt format, usage, training details, results and limitations - is documented in
+[`MODEL.md`](MODEL.md).** Re-running `push-dataset` / `train` uploads new commits to the same repos without
 changing their visibility (`create_repo(..., private=True, exist_ok=True)` leaves existing repos as they are); to
 keep a reference result stable, push experiments to a branch (`--hub_revision`, §8) or pin the revisions above.
 
@@ -422,7 +428,7 @@ per-GPU vLLM logs in `logs/general_sa-cricket.<stage>-<job>/`, and the W&B proje
 
 # Part II - Full one-to-one dataset (500K) with vLLM, and fine-tuning on 32 GPUs
 
-Dates: 2026-10-05 / 06. Same cluster, account, images, model revision and credentials as Part I unless stated.
+Dates: 2026-10-05 to 07. Same cluster, account, images, model revision and credentials as Part I unless stated.
 
 ## 12. Distilling the 500K-row reasoning dataset with vLLM
 
@@ -627,15 +633,14 @@ every rank loads identical weights from Lustre instead). Measured values: see §
 
 ### 13.6 Live measurements during training
 
-**Running since 2026-10-07 05:58** - chunk 1 (job 711070) on 8 `batch-spx` nodes (hecate0325, 0328, 0334,
-0336-0338, 0340, 0341; all in NVLink block 19), run dir `runs/general_sa-cricket.sft-full-10070553`. Measured ~20 min
-into training with `tools/measure_job.sh` and `tools/net_sample.sh`:
+Chunk 1 (job 711070) ran from 2026-10-07 05:58 on 8 `batch-spx` nodes (hecate0325, 0328, 0334, 0336-0338, 0340,
+0341; all in NVLink block 19), run dir `runs/general_sa-cricket.sft-full-10070553`. Measured ~20 min into training with `tools/measure_job.sh` and `tools/net_sample.sh`:
 
 | quantity | measured |
 |---|---|
 | token cache (rank 0) | 458,702 rows tokenized in 377 s → 457,689 train + 1,000 dev rows (13 over 6,144 tokens dropped), mean 686 tokens |
-| step time | ≈ 12.5-13 s per 256-row step → ≈ 0.62 rows/s per GPU (1-node benchmark: 1.14) |
-| projected training | 1,788 steps ≈ **6.2 h** → 12 chained 1-hour chunks (≈ 220 steps each); `tools/extend_chain.sh` added 5 chunks and re-pointed the merge |
+| step time | ≈ 12.5-13 s per 256-row step in the first minutes, 9.5-12.5 s later in chunk 1 → ≈ 0.62-0.84 rows/s per GPU (1-node benchmark: 1.14); **7.8 s/step (≈ 1.03 rows/s/GPU) over the whole second allocation** (job 711522, different nodes) |
+| projected training (at chunk-1 speed) | 1,788 steps ≈ **6.2 h** → chained chunks; `tools/extend_chain.sh` added chunks and re-pointed the merge. In the end one 5-hour job finished it (§13.8) |
 | GPU utilization | 49-72% (mean ≈ 58%) |
 | GPU memory | 129-277 GiB of 279.5 GiB, varying with the length group |
 | GPU power / SM clock | 630-760 W of a 2,300 W limit; 2,415-2,419 MHz (max) |
@@ -646,7 +651,8 @@ into training with `tools/measure_job.sh` and `tools/net_sample.sh`:
 Two findings from the live run: (1) a deadline-stopped chunk used to write `train_result.json`, which the completion
 guard read as "done" - fixed before chunk 1's deadline (now `train_progress.json` until the epoch is finished, and the
 guard checks `finished`); (2) the multi-node step is ~1.8× slower than the single-node benchmark and NVLink traffic is
-far above the expected LoRA all-reduce volume (≈ 0.14 GB/s) - to be profiled (ARCHITECTURE.md §4.4).
+far above the expected LoRA all-reduce volume (≈ 0.14 GB/s) - not yet profiled (ARCHITECTURE.md §4.4). The second
+allocation ran at 7.8 s/step, so part of chunk 1's slowness was node- or warm-up-specific.
 
 Earlier, on 2026-10-06, the cluster could not schedule the job: a `fwupdates` firmware-update reservation took
 144 nodes out of service (all `maint` nodes on batch-xdr and the idle ones on batch-spx), leaving ~140 batch-xdr nodes
@@ -667,16 +673,60 @@ and the nodes they want: `squeue -p batch-xdr -t PD -h -o "%Q %D" | awk -v p=<pr
 `scontrol show reservation` shows maintenance windows. `backfill-xdr` (8 h) is preemptible (`PreemptMode=CANCEL`,
 lower tier) - only use it with frequent checkpoints and resume jobs.
 
-### 13.7 Expected timeline
+### 13.7 Results (run `general_sa-cricket.sft-full-10070553`, finished 2026-10-07)
 
-| phase | estimate |
-|---|---|
-| queue wait for 8 nodes × 5 h | variable (hours on a busy day) |
-| model load + tokenization of 458K rows | ≈ 6 min |
-| training, 1,788 steps at ≈ 7 s | **≈ 3.4 h** |
-| merge (1 node) + eval-ft (1 node) + push | ≈ 10 min |
+**Training.** 1,788 / 1,788 steps (1 epoch, 457,689 rows, global batch 256, 32 Rubin GPUs) in two allocations:
+chunk 1 (job 711070, batch-spx, 05:58-06:48) stopped by its deadline at step 272 and saved `checkpoint-272`; the
+5-hour job 711522 (batch-spx, hecate0343/0352/0354-0359) recognised the interrupted run, resumed at 12:48 and
+finished at 16:06 (steps 273-1,788 in 195.9 min ≈ 7.8 s/step). Total ≈ 4.0 h of training, ≈ 128 GPU-hours. The safety
+chunk 711523 exited in 58 s ("training is complete"), merge 711524 took 1:22, eval-ft + report + push 711525 4:21.
 
-### 13.8 How to repeat
+Loss: train ≈ 0.330 → 0.311, **dev 0.326 → 0.318, falling for the whole epoch** (unlike Part I's flat curve).
+`train_result.json` reports `train_loss 0.2666` - an artefact of resuming (HF divides the loss summed over steps
+273-1,788 by all 1,788 steps); the logged per-step loss of ≈ 0.31 is the real value.
+
+**Evaluation** (same 600-question benchmark, 177 unseen matches, k = 4, identical vLLM sampling and seeds):
+
+| question type | accuracy: base → **500K adapter** (4.5K adapter, Part I) | mean output tokens: base → **500K** (4.5K) | truncated: base → 500K |
+|---|---|---|---|
+| run_rate | 98.38% → **99.00%** (99.00%) | 403 → **266** (280) | 0.12% → 0% |
+| chase_rate | 94.38% → **94.62%** (92.25%) | 939 → **586** (610) | 0.25% → 0% |
+| milestone | 99.12% → **100.00%** (99.88%) | 904 → **522** (557) | 0.75% → 0% |
+| **overall** | **97.29% → 97.88%** (97.04%) | **748 → 458, −39%** (482) | **0.38% → 0%** |
+
+pass@4 = 100% for both models on every type; 44 questions became more reliable, 31 less (of 600).
+
+* **Shorter reasoning at equal or better accuracy**: −39% output tokens overall (−34% for the 4.5K adapter), no
+  truncated answers at all.
+* **The 4.5K adapter's chase_rate dip is gone**: 92.25% (−2.1 pts vs base) → 94.62% (+0.25 vs base). More, more varied
+  data fixed the overs-notation slips that 1,500 sampled rows did not cover.
+* Overall accuracy +0.58 pts (≈ +1.2 standard errors over 2,400 samples) - a consistent but small gain, as expected
+  when the base model already scores ~97% on these question types; milestone reached 100%.
+
+Artifacts: adapter + card + `eval_report/` + `merged/` at
+[`Balab2021/Qwen3.8-27B-Cricket-Reasoning-Full-LoRA`](https://huggingface.co/Balab2021/Qwen3.8-27B-Cricket-Reasoning-Full-LoRA)
+(public, revision `5f21ce65`; usage in [`MODEL.md`](MODEL.md)), merged checkpoint `checkpoints/general_sa-cricket.sft-full-10070553/merged` (51 GB, vLLM-ready), W&B run
+`general_sa-cricket.sft-full-10070553`, local copy `pulled/cricket/runs/general_sa-cricket.sft-full-10070553/`.
+Note: the run's `config.json` was rewritten by the resumed job with that job's id and time limit; the hyperparameters
+are unchanged.
+
+### 13.8 Actual timeline (2026-10-06 / 07)
+
+| time | event | job |
+|---|---|---|
+| 10-06 | 8-node jobs pending all day: `fwupdates` maintenance reservation, ~7,000 node requests ahead; cancelled and resubmitted as chunks on `batch-xdr,batch-spx` | - |
+| 10-07 05:58 | chunk 1 starts on 8 `batch-spx` nodes; model load + token cache (458,702 rows in 377 s) | 711070 |
+| ≈ 06:05-06:48 | training steps 1-272 (≈ 9.5 s/step average), deadline stop, `checkpoint-272` saved | 711070 |
+| 06:48-12:48 | next chunk waits in the queue (6 h) | 711522 |
+| 12:48-16:06 | resumes from `checkpoint-272`, steps 273-1,788 in 195.9 min (7.8 s/step), writes `train_result.json` (`finished: true`) | 711522 |
+| 16:06-16:07 | safety chunk sees the finished run and exits (58 s) | 711523 |
+| 16:07-16:09 | merge LoRA into the base model (1:22) | 711524 |
+| 16:09-16:14 | vLLM eval of the fine-tuned model (600 × 4), report, W&B, push to HF (4:21); base eval reused from the bench run | 711525 |
+
+Compute: ≈ 4.0 h × 32 GPUs ≈ **128 GPU-hours** of training, plus ≈ 0.2 GPU-hours for merge and eval. Pure
+compute fits one 5-hour job; the wall-clock time (10 h on 10-07) was dominated by queue waits.
+
+### 13.9 How to repeat
 
 ```bash
 GEN_NAME=train-full bash $C train-full                 # 8 nodes (TRAIN_NODES=..), prints all job ids and the run dir

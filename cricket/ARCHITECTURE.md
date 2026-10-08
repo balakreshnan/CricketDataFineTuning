@@ -6,14 +6,15 @@ stage is evaluated and validated. Diagrams are Mermaid (rendered by GitHub, Hugg
 viewers).
 
 Companion documents: [`DATASET.md`](DATASET.md) (the source data), [`README.md`](README.md) (runbook, measured
-numbers - Part II §12-§14 for this pipeline).
+numbers - Part II §12-§14 for this pipeline), [`MODEL.md`](MODEL.md) (the fine-tuned model: Hugging Face links,
+usage, results, limitations).
 
 **Status (2026-10-07)**
 
 | stage | status |
 |---|---|
 | distillation of the 500K-row dataset | **done** - 500,000 verified rows, all 425,119 source rows covered, published as [`Balab2021/CricketData-T20-Reasoning-Qwen3.8-Full`](https://huggingface.co/datasets/Balab2021/CricketData-T20-Reasoning-Qwen3.8-Full) |
-| fine-tuning on it (32 GPUs) | **running** since 2026-10-07 05:58 on 8 batch-spx nodes as 12 chained 1-hour chunks (≈ 6.2 h of training, §4.4); merge, evals and the adapter push follow automatically |
+| fine-tuning on it (32 GPUs) | **done 2026-10-07**: 1,788 steps (1 epoch) in two chunks (06:48 stop at step 272, then 12:48-16:06), merge + evals + push by 16:14. **97.88%** benchmark accuracy (base 97.29%), **−39% reasoning tokens**, published as [`Balab2021/Qwen3.8-27B-Cricket-Reasoning-Full-LoRA`](https://huggingface.co/Balab2021/Qwen3.8-27B-Cricket-Reasoning-Full-LoRA) - §5.1, README §13.7 |
 | the same training/eval code at small scale | **done** in Part I (4,500 rows, 16 GPUs) - README §1 |
 
 ---
@@ -303,19 +304,20 @@ sequenceDiagram
   G->>N: all-reduce LoRA grads (0.87 GB fp32, ~1.7 GB ring traffic per GPU)
   N-->>G: averaged grads
   G->>G: AdamW update of LoRA weights (fp32 states, ~3.5 GB)
-  Note over G,N: measured on 8 batch-spx nodes - about 12.5 s per step, GPUs 50-72 percent busy, all-reduce over multi-node NVLink (RDMA ports idle)
+  Note over G,N: measured on 8 batch-spx nodes - 9.5 to 12.5 s per step in chunk 1, 7.8 s over the resumed job, GPUs 50-72 percent busy, all-reduce over multi-node NVLink (RDMA ports idle)
 ```
 
-### 4.4 Live run measurements (chunk 1, job 711070, 2026-10-07)
+### 4.4 Live run measurements (2026-10-07)
 
-Measured ~20 min into training on 8 `batch-spx` nodes (hecate0325, 0328, 0334, 0336-0338, 0340, 0341 - all in NVLink
+Chunk 1 (job 711070) was measured ~20 min into training on 8 `batch-spx` nodes (hecate0325, 0328, 0334, 0336-0338, 0340, 0341 - all in NVLink
 block 19) with `tools/measure_job.sh` and `tools/net_sample.sh`:
 
 | quantity | measured |
 |---|---|
 | token cache build (rank 0, 458,702 rows) | 377 s; 457,689 train + 1,000 dev rows, 13 rows over 6,144 tokens dropped, mean 686 tokens |
 | step time | **≈ 12.5-13 s** per step of 256 rows (steps 30-100) → ≈ 0.62 rows/s per GPU, about half the 1-node benchmark (1.14) |
-| projected training time | 1,788 steps × 12.5 s ≈ **6.2 h** → run as 12 chained 1-hour chunks (~220 steps each) |
+| projected training time (chunk-1 speed) | 1,788 steps × 12.5 s ≈ **6.2 h** → planned as chained chunks |
+| **actual, second allocation** (job 711522, hecate0343, 0352, 0354-0359) | steps 273-1,788 in 195.9 min = **7.8 s/step ≈ 1.03 rows/s per GPU** (90% of the 1-node benchmark); whole epoch ≈ 4.0 h ≈ 128 GPU-hours |
 | GPU utilization | 49-72% (mean ≈ 58%) on all 32 GPUs |
 | GPU memory | 129-277 GiB of 279.5 GiB (varies with the length group in flight) |
 | GPU power / clock | 630-760 W (limit 2,300 W); SM clock 2,415-2,419 MHz (at max) |
@@ -326,7 +328,8 @@ block 19) with `tools/measure_job.sh` and `tools/net_sample.sh`:
 Open question for tuning: 8.3 GB/s per GPU is far more traffic than the LoRA gradient all-reduce alone needs
 (≈ 1.7 GB per GPU per step ≈ 0.14 GB/s), and the step time is ~1.8× the single-node benchmark. Candidates to profile
 next: what DDP/NCCL actually reduces per step (e.g. with `NCCL_DEBUG=INFO` and a torch profiler trace), and multi-node
-vs single-node scaling at the same per-GPU batch.
+vs single-node scaling at the same per-GPU batch. The second allocation's 7.8 s/step (on other nodes, after warm-up)
+shows the multi-node overhead is much smaller than chunk 1 suggested; the NVLink volume was not re-measured.
 
 ### 4.5 Sizing (benchmarked, README §13.2)
 
@@ -334,7 +337,7 @@ vs single-node scaling at the same per-GPU batch.
 |---|---|
 | rows / tokens | 457,702 training rows, mean 700 tokens (~220 prompt + ~464 reasoning + answer), max 6,144 |
 | steps | 1 epoch ≈ 1,788 at global batch 256 |
-| throughput | benchmark (1 node): 1.14 rows/s per GPU → 3.4 h on 32 GPUs; **measured on 8 nodes: ≈ 0.62 rows/s per GPU → ≈ 6.2 h** (§4.4) |
+| throughput | benchmark (1 node): 1.14 rows/s per GPU → 3.4 h on 32 GPUs; measured on 8 nodes: ≈ 0.62 rows/s per GPU in chunk 1, **≈ 1.03 rows/s per GPU over the resumed job → ≈ 4.0 h for the epoch** (§4.4) |
 | rejected settings | batch 16 (OOM: ~98 GB of fp32 logits for 16 × 6,144 × 248,320), no gradient checkpointing (OOM) |
 | memory per GPU | weights 51 GiB + LoRA states 3.5 GB + checkpointed activations + up to ~98 GB transient logits (fits 279.5 GiB) |
 
@@ -353,7 +356,7 @@ flowchart TD
   FE --> MET["sampling.metrics per type:<br/>accuracy, pass@4, mean tokens,<br/>truncated, no-answer"]
   MET --> REP["report.py: report.md, comparison.json,<br/>plots (accuracy, tokens by type, training curves)"]
   REP --> WB["W&B: summary + base-vs-ft table + plots<br/>(same run id as the SFT run)"]
-  REP --> HUB["HF push: adapter (base_model fixed to Qwen/Qwen3.8-27B),<br/>model card with results, eval_report/"]
+  REP --> HUB["HF push: adapter (base_model fixed to Qwen/Qwen3.8-27B),<br/>model card with results, eval_report/<br/>(merged/ only with --push_merged)"]
 ```
 
 | metric | definition |
@@ -367,6 +370,25 @@ flowchart TD
 The benchmark is the fixed 600-question `eval.jsonl` (200 per original type, 177 matches never used for training),
 shared with Part I, so results of every run are comparable. Both models are sampled with identical settings and seeds;
 the observed noise between identical setups is about ±0.15-0.3 points.
+
+The upload step pushes the adapter folder; since `merge.py` writes `merged/` inside it, the first two runs uploaded the
+merged 54.7 GB model too (both public model repos contain it, which lets users load it in vLLM directly). `train.py` and
+`finish_eval.py` now exclude `merged/` (and `checkpoint-*`) unless `--push_merged` is passed.
+
+### 5.1 Results (run `general_sa-cricket.sft-full-10070553`)
+
+| question type | base Qwen3.8-27B | 4.5K adapter (Part I) | **500K adapter** | mean tokens base → 4.5K → **500K** |
+|---|---|---|---|---|
+| run_rate | 98.38% | 99.00% | **99.00%** | 403 → 280 → **266** |
+| chase_rate | 94.38% | 92.25% | **94.62%** | 939 → 610 → **586** |
+| milestone | 99.12% | 99.88% | **100.00%** | 904 → 557 → **522** |
+| **overall** | **97.29%** | 97.04% | **97.88%** | **748 → 482 → 458 (−39%)** |
+| truncated | 0.38% | 0% | **0%** | |
+| pass@4 | 100% | 100% | 100% | |
+
+Training loss ≈ 0.330 → 0.311, dev loss 0.326 → 0.318 (still falling at the end of the epoch). 44 questions became
+more reliable and 31 less. The main gain is efficiency (39% less inference compute per answer); accuracy rises
+slightly (+0.58 pts) and the 4.5K adapter's chase_rate regression is gone. Details: README §13.7, [`MODEL.md`](MODEL.md) §6.
 
 ---
 
@@ -469,6 +491,8 @@ bash $C generate-full                                   # chain more with --depe
 bash $C retry-full                                      # only if retry.jsonl is non-empty
 bash $C push-full
 # fine-tuning + evaluation + adapter push
-PARTITION=batch-xdr,batch-spx GEN_NAME=train-full TRAIN_TIME=01:00:00 TRAIN_MIN=50 TRAIN_CHUNKS=7 SAVE_STEPS=100 \
-  bash $C train-full
+PARTITION=batch-xdr,batch-spx GEN_NAME=train-full TRAIN_TIME=04:59:00 TRAIN_MIN=280 SAVE_STEPS=100 \
+  bash $C train-full                                    # one 5 h job is enough at ~7.8 s/step; add TRAIN_CHUNKS for resumes
+# re-merge / re-evaluate an existing run (e.g. after a cancelled chain):
+RUN=general_sa-cricket.sft-full-10070553 AFTER=<last train job> bash $C finish-full
 ```

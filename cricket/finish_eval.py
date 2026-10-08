@@ -19,6 +19,7 @@ p.add_argument("--k", type=int, default=4)
 p.add_argument("--hub_model_id", default=None)
 p.add_argument("--hub_revision", default=None)
 p.add_argument("--base_model_id", default="Qwen/Qwen3.8-27B")
+p.add_argument("--push_merged", action="store_true", help="also upload the merged full model (merged/, ~55 GB)")
 args = p.parse_args()
 
 run_dir = Path(args.run_dir)
@@ -46,7 +47,7 @@ if use_wandb:
         wandb.init(mode="offline", **kw)
     for tag, m in summaries.items():
         wandb_eval(tag, m)
-finalize(SimpleNamespace(eval_k=args.k, hub_model_id=args.hub_model_id, hub_revision=args.hub_revision,
+finalize(SimpleNamespace(eval_k=args.k, hub_model_id=args.hub_model_id, hub_revision=args.hub_revision, push_merged=args.push_merged,
                          base_model_id=args.base_model_id), run_dir, use_wandb, args.adapter_dir)
 if use_wandb:
     import wandb
