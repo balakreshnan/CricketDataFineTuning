@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Copy the eos/ code to EOS, or pull results back, through the eos/bin/eos-bridge session.
+#   eos/bin/esync              -> eos/ contents to /home/bbalakreshna/clustercodes (jobs run from there)
+#   eos/bin/esync pull <path>  -> <path> (relative to $LUSTRE_DIR) into eos/pulled/<path>
+# Ground rule: code runs from $HOME/clustercodes; weights, HF cache, datasets, ckpts and logs live on
+# /lustre/fsw/general_sa/bbalakreshna (see eos/env.sh).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+EX="bin/ex"
+CODE='$HOME/clustercodes'                              # expanded on the cluster
+LUSTRE=/lustre/fsw/general_sa/bbalakreshna
+CHUNK=60000   # stay well under the 128 KiB single-argument limit
+
+if [[ "${1:-}" == "pull" ]]; then
+  mkdir -p pulled
+  # wandb/ holds W&B's own copy of the run (large, synced to W&B anyway)
+  $EX -t 1800 "cd $LUSTRE && tar -czf - --exclude=wandb '$2' | base64 -w0; echo" | base64 -d | tar -xzf - -C pulled
+  echo "Pulled $2 -> eos/pulled/$2"
+  exit 0
+fi
+
+crlf=$(find . -path ./pulled -prune -o -type f ! -name '*.pyc' -exec sh -c 'tr -d "\r" < "$1" | cmp -s - "$1" || echo "$1"' _ {} \;)
+if [[ -n $crlf ]]; then
+  echo "CRLF line endings would break bash on the cluster; fix with: sed -i 's/\r\$//' <file>" >&2
+  echo "$crlf" >&2
+  exit 1
+fi
+
+tmp="/tmp/esync-$$.b64"
+data=$(tar -czf - --exclude=pulled --exclude=__pycache__ --exclude='*.pyc' --exclude=ssh_config . | base64 -w0)
+echo "sending $(( ${#data} / 1024 )) KiB (base64)"
+$EX "rm -f $tmp"
+for (( i = 0; i < ${#data}; i += CHUNK )); do
+  $EX "printf %s '${data:i:CHUNK}' >> $tmp"
+done
+$EX "mkdir -p $CODE && base64 -d $tmp | tar -xzf - -C $CODE && rm -f $tmp && find $CODE -type f \\( -name '*.sh' -o -name '*.sbatch' -o -path '*/bin/*' \\) -exec chmod +x {} + && echo synced to $CODE"

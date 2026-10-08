@@ -1,0 +1,7 @@
+# Used by eos/bin/eos-bridge (Git Bash's ssh). Same single-session relay as Hecate (no multiplexing on Windows).
+Host eos
+    HostName login-eos02.eos.clusters.nvidia.com
+    User bbalakreshna
+    ServerAliveInterval 60
+    ServerAliveCountMax 5
+    UserKnownHostsFile /c/Users/bbalakreshna/.ssh/known_hosts

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Run a command on the EOS login node through the eos/bin/eos-bridge session and print its output.
+#   eos/bin/ex 'squeue --me'
+#   eos/bin/ex -t 1800 'some long command'     # timeout in seconds (default 600)
+# Each command runs in a fresh login shell (bash -lc), stdin from /dev/null; exit code is passed through.
+set -euo pipefail
+Q="$HOME/.eos-bridge"
+timeout=600
+if [[ ${1:-} == -t ]]; then timeout=$2; shift 2; fi
+[[ $# -gt 0 ]] || { echo "usage: eos/bin/ex [-t seconds] 'command'" >&2; exit 2; }
+
+if [[ "$(cat "$Q/state" 2>/dev/null)" != open ]] || ! grep -q __HX_BRIDGE_UP__ "$Q/out" 2>/dev/null; then
+  echo "EOS bridge is not connected. In PowerShell run:  & 'C:\\Program Files\\Git\\bin\\bash.exe' eos/bin/eos-bridge" >&2
+  exit 255
+fi
+
+id="$(date +%s%N)$RANDOM"
+b64=$(printf '%s' "$*" | base64 -w0)
+# base64 keeps quoting/newlines/syntax errors in the command from desynchronising the shared shell.
+printf 'echo __HX_BEGIN_%s; bash -lc "$(echo %s | base64 -d)" </dev/null 2>&1; echo "__HX_END_%s rc=$?"\n' \
+  "$id" "$b64" "$id" >> "$Q/cmd"
+
+deadline=$(( $(date +%s) + timeout ))
+until grep -q "__HX_END_$id" "$Q/out"; do
+  if (( $(date +%s) > deadline )); then echo "hx: timed out after ${timeout}s (command may still be running)" >&2; exit 124; fi
+  if [[ "$(cat "$Q/state")" != open ]]; then echo "hx: bridge closed" >&2; exit 255; fi
+  sleep 0.5
+done
+sed -n "/__HX_BEGIN_$id/,/__HX_END_$id/p" "$Q/out" | sed '1d;$d'
+rc=$(grep -o "__HX_END_$id rc=[0-9]*" "$Q/out" | sed 's/.*rc=//')
+exit "${rc:-1}"

@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nemotron Cricket SFT</title>
+<meta name="description" content="Full SFT of Nemotron-3.5-Lightning-30B-A3B on cricket reasoning traces on EOS H100: architecture, pipeline, training curves and benchmark results.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f6f3; --surface: #fcfcfb; --surface-2: #f0efec; --border: #e2e1dc;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #7a7974;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+  --s1-soft: #cde2fb; --s2-soft: #fbdccd; --s3-soft: #c9eedf;
+  --good: #0ca30c; --critical: #d03b3b; --mask: #c9c8c2;
+  --grid: #e9e8e3; --accent: #76b900;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --border: #33332f;
+    --text: #ffffff; --text-2: #c3c2b7; --muted: #8f8e86;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    --s1-soft: #1c3a5f; --s2-soft: #4a2617; --s3-soft: #133d2e;
+    --mask: #4a4a45; --grid: #2a2a27;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --border: #33332f;
+  --text: #ffffff; --text-2: #c3c2b7; --muted: #8f8e86;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+  --s1-soft: #1c3a5f; --s2-soft: #4a2617; --s3-soft: #133d2e;
+  --mask: #4a4a45; --grid: #2a2a27;
+  --shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--s1); }
+code { font: 13px ui-monospace, SFMono-Regular, Consolas, monospace; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+header.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+header.top .wrap { display: flex; align-items: center; gap: 16px; height: 52px; }
+.brand { font-weight: 650; white-space: nowrap; }
+.brand span { color: var(--accent); }
+nav.toc { display: flex; gap: 4px; overflow-x: auto; flex: 1; scrollbar-width: none; }
+nav.toc a { color: var(--text-2); text-decoration: none; font-size: 13px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; }
+nav.toc a:hover, nav.toc a.on { background: var(--surface-2); color: var(--text); }
+button { font: inherit; cursor: pointer; }
+.btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px; padding: 6px 12px; font-size: 13px; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--s1); border-color: var(--s1); color: #fff; }
+.btn[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+section { padding: 44px 0 8px; scroll-margin-top: 56px; }
+h1 { font-size: clamp(26px, 4vw, 38px); line-height: 1.15; margin: 34px 0 8px; letter-spacing: -.02em; }
+h2 { font-size: 22px; margin: 0 0 6px; letter-spacing: -.01em; }
+h3 { font-size: 15px; margin: 0 0 10px; }
+.lede { color: var(--text-2); max-width: 760px; margin: 0 0 18px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; box-shadow: var(--shadow); }
+.grid { display: grid; gap: 16px; }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.g3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 22px 0 6px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.tile .k { font-size: 12px; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
+.tile .v { font-size: 28px; font-weight: 650; letter-spacing: -.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tile .d { font-size: 13px; color: var(--text-2); }
+.tile .d b { color: var(--good); font-weight: 600; }
+.pill { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--surface-2); color: var(--text-2); }
+.muted { color: var(--text-2); }
+.small { font-size: 13px; }
+.chart-box { position: relative; height: 280px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--text-2); margin: 0 0 8px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+.legend i.line { height: 3px; border-radius: 2px; vertical-align: 3px; width: 16px; }
+.legend i.dot { border-radius: 50%; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-2); font-weight: 600; font-size: 12.5px; }
+td.num, th.num { text-align: right; }
+details.tbl { margin-top: 10px; }
+details.tbl summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
+.ctrl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+
+/* pipeline */
+.pipe { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; position: relative; }
+.stage { position: relative; background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px; padding: 12px 10px 10px; cursor: pointer; transition: border-color .25s, transform .25s, background .25s; text-align: left; color: var(--text); }
+.stage:hover { transform: translateY(-2px); }
+.stage .n { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stage .t { font-weight: 600; font-size: 13.5px; line-height: 1.25; margin: 2px 0 4px; }
+.stage .w { font-size: 11.5px; color: var(--text-2); }
+.stage .bar { height: 3px; border-radius: 2px; background: var(--surface-2); margin-top: 8px; overflow: hidden; }
+.stage .bar b { display: block; height: 100%; width: 0; background: var(--s1); }
+.stage.done .bar b { width: 100%; }
+.stage.on { border-color: var(--s1); background: color-mix(in srgb, var(--s1) 7%, var(--surface)); }
+.stage.on .bar b { animation: fill var(--dur, 2.6s) linear forwards; }
+@keyframes fill { from { width: 0 } to { width: 100% } }
+.stage .icon { font-size: 18px; }
+.stage-detail { margin-top: 14px; display: grid; grid-template-columns: 1fr; gap: 6px; min-height: 120px; }
+.stage-detail .h { font-weight: 650; font-size: 16px; }
+.stage-detail ul { margin: 4px 0 0; padding-left: 18px; color: var(--text-2); }
+.stage-detail .meta { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* architecture */
+.layers { display: grid; grid-template-columns: repeat(26, 1fr); gap: 3px; }
+.arch-row { display: grid; grid-template-columns: 1fr 64px; gap: 14px; align-items: end; }
+.mtp-box { border-left: 1px dashed var(--border); padding-left: 12px; }
+.mtp-layers { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+.layer { aspect-ratio: 1 / 1.8; border-radius: 4px; cursor: pointer; transition: transform .15s, outline-color .15s; outline: 2px solid transparent; outline-offset: 1px; }
+.layer:hover, .layer.sel { transform: scaleY(1.08); outline-color: var(--text); }
+.layer.mamba { background: var(--s1); }
+.layer.moe { background: var(--s2); }
+.layer.attention { background: var(--s3); }
+.layer.mtp { background: repeating-linear-gradient(45deg, var(--s2), var(--s2) 4px, color-mix(in srgb, var(--s2) 60%, var(--surface)) 4px, color-mix(in srgb, var(--s2) 60%, var(--surface)) 8px); }
+.layer.mtp.attention { background: repeating-linear-gradient(45deg, var(--s3), var(--s3) 4px, color-mix(in srgb, var(--s3) 60%, var(--surface)) 4px, color-mix(in srgb, var(--s3) 60%, var(--surface)) 8px); }
+.arch-flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); margin: 12px 0 0; }
+.arch-flow .box { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; background: var(--surface-2); color: var(--text); }
+.layer-info { min-height: 96px; }
+.moe-viz { display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; margin-top: 8px; }
+.moe-viz .ex { aspect-ratio: 1; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--border); transition: background .25s, transform .25s; }
+.moe-viz .ex.hot { background: var(--s2); border-color: var(--s2); transform: scale(1.12); }
+.moe-viz .ex.shared { background: var(--text-2); border-color: var(--text-2); }
+.tokenrow { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 10px; }
+.tok { font: 12px ui-monospace, Consolas, monospace; padding: 3px 7px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--border); transition: all .25s; }
+.tok.on { background: var(--s2); color: #fff; border-color: var(--s2); }
+
+/* parallelism */
+.nodes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.node { border: 1.5px dashed var(--border); border-radius: 12px; padding: 12px; position: relative; transition: border-color .3s; }
+.node.hl { border-color: var(--s1); border-style: solid; }
+.node .lbl { font-size: 12px; color: var(--text-2); margin-bottom: 8px; display: flex; justify-content: space-between; }
+.gpus { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.gpu { border: 1.5px solid var(--border); border-radius: 9px; padding: 8px 6px; text-align: center; font-size: 11.5px; background: var(--surface); transition: all .3s; position: relative; }
+.gpu .id { font-weight: 650; font-size: 13px; }
+.gpu .sub { color: var(--muted); font-size: 10.5px; }
+.gpu.tp { border-color: var(--s1); background: color-mix(in srgb, var(--s1) 12%, var(--surface)); }
+.gpu.tp.alt { background: color-mix(in srgb, var(--s1) 30%, var(--surface)); }
+.gpu.ep { border-color: var(--s2); background: color-mix(in srgb, var(--s2) 12%, var(--surface)); }
+.gpu.dp { border-color: var(--s3); background: color-mix(in srgb, var(--s3) 14%, var(--surface)); }
+.gpu.pulse { animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 0%, transparent), 0 0 0 4px color-mix(in srgb, var(--s1) 25%, transparent); } }
+.gpu .mem { height: 4px; border-radius: 2px; background: var(--surface-2); margin-top: 5px; overflow: hidden; }
+.gpu .mem b { display: block; height: 100%; width: 81%; background: var(--text-2); }
+.phase-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 14px; }
+.phase { border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; font-size: 12.5px; color: var(--text-2); transition: all .25s; cursor: pointer; background: var(--surface); text-align: left; }
+.phase b { display: block; color: var(--text); font-size: 13px; }
+.phase.on { border-color: var(--text); color: var(--text); background: var(--surface-2); }
+.link-layer { position: absolute; inset: 0; pointer-events: none; }
+
+/* packing */
+.pack { display: flex; height: 38px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--surface-2); }
+.seg { height: 100%; transition: flex-basis .6s ease, opacity .4s; position: relative; border-right: 2px solid var(--surface); }
+.seg.prompt { background: var(--mask); }
+.seg.think { background: var(--s1); }
+.seg.ans { background: var(--s3); }
+.seg.pad { background: repeating-linear-gradient(135deg, var(--surface-2), var(--surface-2) 4px, var(--border) 4px, var(--border) 6px); border-right: 0; }
+.pack-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.chat { font: 12.5px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-2); border-radius: 10px; padding: 12px 14px; white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow: auto; border: 1px solid var(--border); }
+.chat .m { color: var(--muted); }
+.chat .think { color: var(--text-2); }
+.chat .final { font-weight: 700; }
+.chat .loss { background: color-mix(in srgb, var(--s1) 13%, transparent); border-radius: 3px; }
+
+/* bench */
+.bench-row { display: grid; grid-template-columns: 210px 1fr 74px; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+.bench-row:last-child { border-bottom: 0; }
+.mem-track { position: relative; height: 22px; background: var(--surface-2); border-radius: 6px; overflow: visible; }
+.mem-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 0 4px 4px 0; background: var(--s1); width: 0; transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
+.mem-fill.oom { background: var(--critical); }
+.mem-limit { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--text); left: calc(80 / 90 * 100%); }
+.mem-limit::after { content: "80 GB H100"; position: absolute; top: -18px; left: -30px; font-size: 11px; color: var(--text-2); white-space: nowrap; }
+.status { font-size: 12px; font-weight: 600; display: inline-flex; gap: 4px; align-items: center; }
+.status.ok { color: var(--good); }
+.status.bad { color: var(--critical); }
+
+/* misc */
+.timeline { position: relative; padding-left: 22px; }
+.timeline::before { content: ""; position: absolute; left: 7px; top: 4px; bottom: 4px; width: 2px; background: var(--border); }
+.ev { position: relative; padding: 0 0 14px; }
+.ev::before { content: ""; position: absolute; left: -19px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--muted); }
+.ev.ok::before { border-color: var(--good); background: var(--good); }
+.ev.fix::before { border-color: var(--s2); }
+.ev .tm { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+footer { color: var(--muted); font-size: 12.5px; padding: 40px 0 60px; }
+@media (max-width: 640px) {
+  .layers { grid-template-columns: repeat(13, 1fr); }
+  .arch-row { grid-template-columns: 1fr 44px; }
+  .bench-row { grid-template-columns: 1fr 64px; }
+  .bench-row .name { grid-column: 1 / -1; }
+  .moe-viz { grid-template-columns: repeat(16, 1fr); gap: 2px; }
+  .tile .v { font-size: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <div class="brand"><span>■</span> Nemotron Cricket SFT</div>
+  <nav class="toc" id="toc">
+    <a href="#overview">Overview</a><a href="#pipeline">Pipeline</a><a href="#arch">Architecture</a>
+    <a href="#parallel">Parallelism</a><a href="#data">Data &amp; packing</a><a href="#config">Cluster config</a>
+    <a href="#training">Training</a><a href="#evals">Evals</a><a href="#journey">Run log</a>
+  </nav>
+  <button class="btn" id="themeBtn" aria-label="Toggle theme">◐</button>
+</div></header>
+
+<main class="wrap">
+<section id="overview">
+  <span class="pill">EOS · 2 × DGX H100 · 2026-10-08</span>
+  <h1>Fine-tuning Nemotron-3.5-Lightning-30B-A3B for cricket reasoning</h1>
+  <p class="lede">Full-parameter SFT of NVIDIA's hybrid Mamba–Transformer MoE on 458K verified T20 reasoning traces with
+    Megatron-Bridge. One epoch on 16 H100s took 1 h 37 min. On 600 questions from held-out matches, accuracy rose from
+    <b>89.6% to 97.0%</b>, and answers got <b>69% shorter</b>.</p>
+  <div class="tiles" id="tiles"></div>
+  <div class="small muted" style="margin-top:10px">
+    Model: <a href="https://huggingface.co/Balab2021/Nemotron-3.5-Lightning-30B-A3B-Cricket-Reasoning">Balab2021/Nemotron-3.5-Lightning-30B-A3B-Cricket-Reasoning</a> ·
+    Data: <a href="https://huggingface.co/datasets/Balab2021/CricketData-T20-Reasoning-Qwen3.8-Full">CricketData-T20-Reasoning-Qwen3.8-Full</a> ·
+    Metrics: <a href="https://wandb.ai/balabala76/nemotron35-cricket-reasoning/runs/8qh82u2z">W&amp;B run</a>
+  </div>
+</section>
+
+<section id="pipeline">
+  <h2>End-to-end pipeline</h2>
+  <p class="lede">Each stage ran as a Slurm job in the NeMo 26.08.01 container. Code ran from <code>~/clustercodes</code>, and all weights, caches and checkpoints lived on Lustre. Press play, or click a stage.</p>
+  <div class="ctrl">
+    <button class="btn primary" id="pipePlay">▶ Play</button>
+    <button class="btn" id="pipePrev">‹ Prev</button>
+    <button class="btn" id="pipeNext">Next ›</button>
+    <span class="small muted" id="pipeHint"></span>
+  </div>
+  <div class="pipe" id="pipe"></div>
+  <div class="card stage-detail" id="pipeDetail" style="margin-top:14px"></div>
+</section>
+
+<section id="arch">
+  <h2>Model architecture</h2>
+  <p class="lede">The 52 layers interleave Mamba-2 state-space mixers, sparse MoE feed-forwards and a few grouped-query attention
+    layers, and an MTP head predicts two extra tokens. 30B parameters total, about 3B active per token. Click a layer for details.</p>
+  <div class="card">
+    <div class="legend" id="archLegend"></div>
+    <div class="arch-row">
+      <div><div class="small muted" style="margin-bottom:6px">52 decoder layers (0 → 51)</div><div class="layers" id="layers" role="list" aria-label="52 decoder layers"></div></div>
+      <div class="mtp-box"><div class="small muted" style="margin-bottom:6px">MTP head</div><div class="mtp-layers" id="mtpLayers"></div></div>
+    </div>
+    <div class="arch-flow">
+      <span class="box">tokens → embedding (131,072 vocab, d=2,688)</span>→
+      <span class="box">52 hybrid layers</span>→
+      <span class="box">final norm → LM head</span>+
+      <span class="box">MTP block (attention + MoE) × 2 draft tokens</span>
+    </div>
+  </div>
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card layer-info" id="layerInfo"></div>
+    <div class="card">
+      <h3>MoE routing, animated</h3>
+      <div class="small muted">Each token's router (sigmoid, top-6 of 128) picks 6 routed experts. One shared expert is always on.</div>
+      <div class="tokenrow" id="tokRow"></div>
+      <div class="moe-viz" id="moeViz"></div>
+      <div class="legend" style="margin-top:10px"><span><i style="background:var(--s2)"></i>routed expert, active for this token</span><span><i style="background:var(--text-2)"></i>shared expert</span><span><i style="background:var(--surface-2);border:1px solid var(--border)"></i>idle expert</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="parallel">
+  <h2>Parallelism on 16 H100s</h2>
+  <p class="lede">Dense and Mamba weights are split across GPU pairs (TP2 with sequence parallel). The 128 experts are spread over the 8 GPUs of a node (EP8, 16 experts per GPU).
+    That leaves data parallelism of 8 for dense weights and 2 for experts. Click through one training step.</p>
+  <div class="ctrl" id="phaseCtrl"><button class="btn primary" id="phasePlay">▶ Animate step</button></div>
+  <div class="nodes" id="nodes"></div>
+  <div class="phase-list" id="phases"></div>
+</section>
+
+<section id="data">
+  <h2>Data and sequence packing</h2>
+  <p class="lede">Each row becomes a system/user/assistant chat with the trace as <code>reasoning_content</code>, so Nemotron's own template renders
+    <code>&lt;think&gt;…&lt;/think&gt;</code>. Examples are packed into 4,096-token sequences, about 6.25 per pack with 97.7% of each pack used. Loss counts only on the assistant turn.</p>
+  <div class="grid g2">
+    <div class="card">
+      <h3>One 4,096-token packed sequence</h3>
+      <div class="legend"><span><i style="background:var(--mask)"></i>prompt (masked, no loss)</span><span><i style="background:var(--s1)"></i>reasoning (loss)</span><span><i style="background:var(--s3)"></i>answer (loss)</span><span><i style="background:var(--border)"></i>padding</span></div>
+      <div class="pack" id="pack"></div>
+      <div class="pack-scale"><span>0</span><span>1,024</span><span>2,048</span><span>3,072</span><span>4,096 tokens</span></div>
+      <div class="ctrl" style="margin:12px 0 0"><button class="btn" id="repack">↻ Pack another</button><span class="small muted" id="packStat"></span></div>
+      <table style="margin-top:14px" id="prepTable"></table>
+    </div>
+    <div class="card">
+      <h3>A training example as the model sees it</h3>
+      <div class="ctrl" style="margin-bottom:8px" id="exTabs"></div>
+      <div class="chat" id="exChat"></div>
+      <div class="small muted" style="margin-top:6px">Highlighted text is the part trained with loss. This output was generated by the <b>fine-tuned</b> model on a held-out benchmark question.</div>
+    </div>
+  </div>
+</section>
+
+<section id="config">
+  <h2>Finding the cluster config</h2>
+  <p class="lede">I benchmarked three parallel layouts for 25 steps each on 2 nodes. Only tensor parallelism of 2 fits in an 80 GB H100. I picked 2 nodes because the <code>interactive</code>
+    partition starts 2-node jobs within minutes, while <code>batch</code> had a ~8 h queue.</p>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Peak GPU memory per layout</h3>
+      <div id="benchRows"></div>
+    </div>
+    <div class="card">
+      <h3>Step time during benchmark A (ms)</h3>
+      <div class="chart-box" style="height:230px"><canvas id="benchChart" aria-label="Benchmark A step time per iteration"></canvas></div>
+      <div class="small muted">Step 1 includes kernel compilation (≈100 s). Steady state is 9.35 s per step, 93 TFLOP/s per GPU, 524K tokens per step (≈56K tokens/s).</div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h3>Partitions on EOS for account <code>general_sa</code></h3>
+    <table><thead><tr><th>Partition</th><th>Limit</th><th>Per-user cap</th><th>Observed wait</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td><b>interactive</b></td><td>2 h</td><td>2 nodes, 2 jobs (8-node shared cap)</td><td>seconds – minutes</td><td>import, bench, training, export, evals, push</td></tr>
+      <tr><td>batch</td><td>4 h</td><td>360 nodes</td><td>~8 h (est. start 16:05)</td><td>–</td></tr>
+      <tr><td>backfill</td><td>4 h, preemptible (requeue)</td><td>360 nodes</td><td>est. 12:10 – 14:31</td><td>moved off</td></tr>
+    </tbody></table>
+  </div>
+</section>
+
+<section id="training">
+  <h2>Training curves</h2>
+  <p class="lede">573 optimizer steps make one epoch: 73,263 packed sequences at a global batch of 128. LR 5e-6 with 30 warmup steps and cosine decay to 5e-7. Validation loss on 4,000 held-out examples kept falling the whole run.</p>
+  <div class="ctrl" id="trainCtrl">
+    <span class="small muted">x-axis:</span>
+    <button class="btn" aria-pressed="true" data-x="step">Step</button>
+    <button class="btn" aria-pressed="false" data-x="epoch">Epoch</button>
+    <button class="btn" aria-pressed="false" data-x="time">Wall time</button>
+    <span style="flex:1"></span>
+    <button class="btn" id="replayTrain">↻ Replay</button>
+  </div>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Loss</h3>
+      <div class="legend"><span><i class="line" style="background:var(--s1)"></i>LM loss (train)</span><span><i class="line" style="background:var(--s2)"></i>MTP-1 loss</span><span><i class="line" style="background:var(--s3)"></i>MTP-2 loss</span><span><i class="dot" style="background:var(--text)"></i>validation LM loss</span></div>
+      <div class="chart-box"><canvas id="lossChart" aria-label="Training loss curves"></canvas></div>
+      <div class="small muted">y-axis clipped at 1.2: MTP losses start at 2.0 / 2.2 (step 5) and LM loss at 1.12.</div>
+    </div>
+    <div class="card">
+      <h3>Validation loss (zoomed)</h3>
+      <div class="chart-box"><canvas id="valChart" aria-label="Validation loss"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Learning rate</h3>
+      <div class="chart-box" style="height:220px"><canvas id="lrChart" aria-label="Learning rate schedule"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Throughput (TFLOP/s per GPU)</h3>
+      <div class="chart-box" style="height:220px"><canvas id="tputChart" aria-label="Throughput per GPU"></canvas></div>
+      <div class="small muted">Dips at steps 100, 150, 200 … are validation passes and checkpoint saves.</div>
+    </div>
+    <div class="card">
+      <h3>Gradient norm</h3>
+      <div class="chart-box" style="height:220px"><canvas id="gnChart" aria-label="Gradient norm"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>MoE sequence load-balancing loss</h3>
+      <div class="chart-box" style="height:220px"><canvas id="lbChart" aria-label="Load balancing loss"></canvas></div>
+    </div>
+  </div>
+  <details class="tbl card" style="margin-top:16px"><summary>Show training data as a table</summary><div style="max-height:320px;overflow:auto"><table id="trainTable"></table></div></details>
+</section>
+
+<section id="evals">
+  <h2>Benchmark results</h2>
+  <p class="lede">The fixed 600-question benchmark comes from 177 matches held out of training. Each question was sampled 4 times in thinking mode (T=1.0, top-p 0.95, ≤6,144 tokens) with vLLM.
+    An answer scores if its last <code>Final answer:</code> line after <code>&lt;/think&gt;</code> matches the exact value (rates within 0.01).</p>
+  <div class="tiles" id="evalTiles"></div>
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card">
+      <h3>Accuracy by question type</h3>
+      <div class="legend"><span><i style="background:var(--s2)"></i>base</span><span><i style="background:var(--s1)"></i>fine-tuned</span></div>
+      <div class="chart-box"><canvas id="accChart" aria-label="Accuracy by question type"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Mean generated tokens by question type</h3>
+      <div class="legend"><span><i style="background:var(--s2)"></i>base</span><span><i style="background:var(--s1)"></i>fine-tuned</span></div>
+      <div class="chart-box"><canvas id="tokChart" aria-label="Mean generated tokens"></canvas></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h3>Distribution of response length (2,400 samples per model)</h3>
+    <div class="legend"><span><i style="background:var(--s2)"></i>base</span><span><i style="background:var(--s1)"></i>fine-tuned</span></div>
+    <div class="chart-box" style="height:300px"><canvas id="histChart" aria-label="Response length histogram"></canvas></div>
+    <div class="small muted">The base model's long tail runs up to the 6,144-token cap: 4.9% of its samples were truncated with no answer. The fine-tuned model never hit the cap.</div>
+  </div>
+  <details class="tbl card" style="margin-top:16px" open><summary>Results table</summary><table id="evalTable" style="margin-top:8px"></table></details>
+</section>
+
+<section id="journey">
+  <h2>Run log</h2>
+  <p class="lede">What actually happened on 2026-10-08, including the problems hit and their fixes.</p>
+  <div class="card timeline" id="timeline"></div>
+</section>
+<footer>Generated from the EOS logs and eval outputs (<code>tools/collect_metrics.py</code> → <code>html/build.py</code>). Code: <code>eos/nemotron-cricket/</code>.</footer>
+</main>
+
+<script id="metrics" type="application/json">{"train":[{"t":"2026-10-08 09:54:38","step":5,"ms":29460.5,"tflops":29.7,"lr":8.333333e-07,"lm":1.119489,"lb":1.213415,"mtp1":2.037793,"mtp2":2.22014,"gn":12.032},{"t":"2026-10-08 09:55:26","step":10,"ms":9638.0,"tflops":90.7,"lr":1.666667e-06,"lm":1.081703,"lb":1.212171,"mtp1":1.959473,"mtp2":2.143385,"gn":10.329},{"t":"2026-10-08 09:56:14","step":15,"ms":9545.5,"tflops":91.6,"lr":2.5e-06,"lm":0.9358753,"lb":1.204048,"mtp1":1.670237,"mtp2":1.851663,"gn":6.515},{"t":"2026-10-08 09:57:01","step":20,"ms":9488.6,"tflops":92.1,"lr":3.333333e-06,"lm":0.7234957,"lb":1.19206,"mtp1":1.211753,"mtp2":1.357565,"gn":3.642},{"t":"2026-10-08 09:57:48","step":25,"ms":9415.0,"tflops":92.9,"lr":4.166667e-06,"lm":0.6073656,"lb":1.183827,"mtp1":0.8940437,"mtp2":1.00823,"gn":2.209},{"t":"2026-10-08 09:58:35","step":30,"ms":9337.0,"tflops":93.6,"lr":5e-06,"lm":0.5349244,"lb":1.182101,"mtp1":0.7363678,"mtp2":0.8348883,"gn":1.503},{"t":"2026-10-08 09:59:21","step":35,"ms":9298.7,"tflops":94.0,"lr":4.999059e-06,"lm":0.4850292,"lb":1.170461,"mtp1":0.63048,"mtp2":0.7222528,"gn":0.817},{"t":"2026-10-08 10:00:07","step":40,"ms":9235.0,"tflops":94.7,"lr":4.996235e-06,"lm":0.4520114,"lb":1.155307,"mtp1":0.5736497,"mtp2":0.6535539,"gn":0.613},{"t":"2026-10-08 10:00:53","step":45,"ms":9191.0,"tflops":95.1,"lr":4.991532e-06,"lm":0.4406618,"lb":1.139759,"mtp1":0.5461253,"mtp2":0.6161542,"gn":0.539},{"t":"2026-10-08 10:01:39","step":50,"ms":9136.2,"tflops":95.7,"lr":4.984954e-06,"lm":0.4256198,"lb":1.130565,"mtp1":0.5181016,"mtp2":0.5793298,"gn":0.46},{"t":"2026-10-08 10:02:24","step":55,"ms":9095.4,"tflops":96.1,"lr":4.976505e-06,"lm":0.425987,"lb":1.119789,"mtp1":0.5081656,"mtp2":0.5654491,"gn":0.449},{"t":"2026-10-08 10:03:10","step":60,"ms":9054.4,"tflops":96.6,"lr":4.966193e-06,"lm":0.4158075,"lb":1.113509,"mtp1":0.4899796,"mtp2":0.5421766,"gn":0.405},{"t":"2026-10-08 10:03:55","step":65,"ms":9028.9,"tflops":96.8,"lr":4.954027e-06,"lm":0.4084159,"lb":1.106352,"mtp1":0.4745643,"mtp2":0.5228384,"gn":0.455},{"t":"2026-10-08 10:04:40","step":70,"ms":8987.1,"tflops":97.3,"lr":4.940016e-06,"lm":0.4069954,"lb":1.098145,"mtp1":0.4646193,"mtp2":0.5108962,"gn":0.416},{"t":"2026-10-08 10:05:25","step":75,"ms":8931.3,"tflops":97.9,"lr":4.924173e-06,"lm":0.4049727,"lb":1.090992,"mtp1":0.4557776,"mtp2":0.4996475,"gn":0.428},{"t":"2026-10-08 10:06:09","step":80,"ms":8908.4,"tflops":98.1,"lr":4.906511e-06,"lm":0.4027761,"lb":1.084563,"mtp1":0.4468007,"mtp2":0.4888245,"gn":0.46},{"t":"2026-10-08 10:06:54","step":85,"ms":8894.8,"tflops":98.3,"lr":4.887044e-06,"lm":0.3995197,"lb":1.07937,"mtp1":0.4374754,"mtp2":0.4781608,"gn":0.469},{"t":"2026-10-08 10:07:38","step":90,"ms":8869.8,"tflops":98.6,"lr":4.865788e-06,"lm":0.3997937,"lb":1.074558,"mtp1":0.4318572,"mtp2":0.4725441,"gn":0.478},{"t":"2026-10-08 10:08:22","step":95,"ms":8876.5,"tflops":98.5,"lr":4.842763e-06,"lm":0.3935879,"lb":1.06885,"mtp1":0.4212616,"mtp2":0.4607489,"gn":0.464},{"t":"2026-10-08 10:09:06","step":100,"ms":8818.1,"tflops":99.2,"lr":4.817986e-06,"lm":0.3950227,"lb":1.06468,"mtp1":0.4181931,"mtp2":0.4569202,"gn":0.495},{"t":"2026-10-08 10:10:10","step":105,"ms":9410.4,"tflops":92.9,"lr":4.791479e-06,"lm":0.3942806,"lb":1.060562,"mtp1":0.4148101,"mtp2":0.4522134,"gn":0.444},{"t":"2026-10-08 10:10:56","step":110,"ms":9184.6,"tflops":95.2,"lr":4.763263e-06,"lm":0.3930061,"lb":1.054511,"mtp1":0.4086522,"mtp2":0.4449673,"gn":0.503},{"t":"2026-10-08 10:11:42","step":115,"ms":9167.9,"tflops":95.4,"lr":4.733363e-06,"lm":0.3959876,"lb":1.052014,"mtp1":0.4096758,"mtp2":0.4454947,"gn":0.496},{"t":"2026-10-08 10:12:27","step":120,"ms":9143.6,"tflops":95.6,"lr":4.701803e-06,"lm":0.3907934,"lb":1.0473,"mtp1":0.4018255,"mtp2":0.4367131,"gn":0.466},{"t":"2026-10-08 10:13:13","step":125,"ms":9128.8,"tflops":95.8,"lr":4.66861e-06,"lm":0.3931688,"lb":1.044339,"mtp1":0.4007137,"mtp2":0.4347042,"gn":0.451},{"t":"2026-10-08 10:13:58","step":130,"ms":9107.6,"tflops":96.0,"lr":4.633812e-06,"lm":0.3883846,"lb":1.040561,"mtp1":0.3947729,"mtp2":0.4281735,"gn":0.426},{"t":"2026-10-08 10:14:44","step":135,"ms":9113.3,"tflops":95.9,"lr":4.597437e-06,"lm":0.391729,"lb":1.036401,"mtp1":0.3962359,"mtp2":0.4297841,"gn":0.43},{"t":"2026-10-08 10:15:30","step":140,"ms":9098.7,"tflops":96.1,"lr":4.559517e-06,"lm":0.3861597,"lb":1.034005,"mtp1":0.3875223,"mtp2":0.4198035,"gn":0.414},{"t":"2026-10-08 10:16:15","step":145,"ms":9092.9,"tflops":96.1,"lr":4.520081e-06,"lm":0.3882745,"lb":1.03087,"mtp1":0.3879786,"mtp2":0.4195384,"gn":0.419},{"t":"2026-10-08 10:17:00","step":150,"ms":9086.7,"tflops":96.2,"lr":4.479165e-06,"lm":0.3877301,"lb":1.02831,"mtp1":0.3857723,"mtp2":0.4171862,"gn":0.445},{"t":"2026-10-08 10:19:07","step":155,"ms":9308.4,"tflops":93.9,"lr":4.436803e-06,"lm":0.3837937,"lb":1.025735,"mtp1":0.3813351,"mtp2":0.4116581,"gn":0.431},{"t":"2026-10-08 10:19:54","step":160,"ms":9324.6,"tflops":93.8,"lr":4.393028e-06,"lm":0.3854747,"lb":1.022736,"mtp1":0.3820644,"mtp2":0.4128641,"gn":0.398},{"t":"2026-10-08 10:20:40","step":165,"ms":9293.3,"tflops":94.1,"lr":4.347879e-06,"lm":0.3873455,"lb":1.01975,"mtp1":0.3821455,"mtp2":0.412551,"gn":0.412},{"t":"2026-10-08 10:21:27","step":170,"ms":9282.0,"tflops":94.2,"lr":4.301392e-06,"lm":0.3892322,"lb":1.017785,"mtp1":0.3822306,"mtp2":0.4127277,"gn":0.42},{"t":"2026-10-08 10:22:13","step":175,"ms":9288.7,"tflops":94.1,"lr":4.253608e-06,"lm":0.3836954,"lb":1.015682,"mtp1":0.3755055,"mtp2":0.4049541,"gn":0.485},{"t":"2026-10-08 10:23:00","step":180,"ms":9286.3,"tflops":94.1,"lr":4.204565e-06,"lm":0.3870879,"lb":1.014227,"mtp1":0.3780175,"mtp2":0.4072683,"gn":0.405},{"t":"2026-10-08 10:23:46","step":185,"ms":9260.4,"tflops":94.4,"lr":4.154305e-06,"lm":0.384283,"lb":1.011591,"mtp1":0.3744366,"mtp2":0.4034197,"gn":0.386},{"t":"2026-10-08 10:24:32","step":190,"ms":9238.9,"tflops":94.6,"lr":4.102871e-06,"lm":0.3825104,"lb":1.010367,"mtp1":0.3715315,"mtp2":0.4001887,"gn":0.4},{"t":"2026-10-08 10:25:18","step":195,"ms":9230.3,"tflops":94.7,"lr":4.050304e-06,"lm":0.3867556,"lb":1.007043,"mtp1":0.375649,"mtp2":0.4049592,"gn":0.406},{"t":"2026-10-08 10:26:04","step":200,"ms":9235.1,"tflops":94.7,"lr":3.996649e-06,"lm":0.3822927,"lb":1.005446,"mtp1":0.3707743,"mtp2":0.3996509,"gn":0.364},{"t":"2026-10-08 10:27:07","step":205,"ms":9356.2,"tflops":93.4,"lr":3.94195e-06,"lm":0.3810338,"lb":1.004057,"mtp1":0.3692704,"mtp2":0.3976106,"gn":0.399},{"t":"2026-10-08 10:27:53","step":210,"ms":9178.5,"tflops":95.3,"lr":3.886255e-06,"lm":0.3847301,"lb":1.002517,"mtp1":0.3728127,"mtp2":0.4018543,"gn":0.376},{"t":"2026-10-08 10:28:38","step":215,"ms":9170.3,"tflops":95.3,"lr":3.829608e-06,"lm":0.382992,"lb":1.000708,"mtp1":0.369699,"mtp2":0.3980868,"gn":0.389},{"t":"2026-10-08 10:29:24","step":220,"ms":9182.6,"tflops":95.2,"lr":3.772059e-06,"lm":0.382074,"lb":1.000288,"mtp1":0.3683772,"mtp2":0.3969145,"gn":0.41},{"t":"2026-10-08 10:30:10","step":225,"ms":9196.3,"tflops":95.1,"lr":3.713654e-06,"lm":0.3822605,"lb":0.9985048,"mtp1":0.3680338,"mtp2":0.3962685,"gn":0.385},{"t":"2026-10-08 10:30:56","step":230,"ms":9178.8,"tflops":95.2,"lr":3.654442e-06,"lm":0.3759438,"lb":0.9972427,"mtp1":0.3621434,"mtp2":0.3895368,"gn":0.38},{"t":"2026-10-08 10:31:42","step":235,"ms":9158.1,"tflops":95.5,"lr":3.594474e-06,"lm":0.3838029,"lb":0.9968309,"mtp1":0.3698955,"mtp2":0.3980509,"gn":0.424},{"t":"2026-10-08 10:32:28","step":240,"ms":9191.8,"tflops":95.1,"lr":3.533799e-06,"lm":0.3810741,"lb":0.9945719,"mtp1":0.3652881,"mtp2":0.3929521,"gn":0.367},{"t":"2026-10-08 10:33:14","step":245,"ms":9151.7,"tflops":95.5,"lr":3.472468e-06,"lm":0.3843137,"lb":0.9939474,"mtp1":0.3682106,"mtp2":0.3963372,"gn":0.381},{"t":"2026-10-08 10:34:00","step":250,"ms":9185.2,"tflops":95.2,"lr":3.410533e-06,"lm":0.3835732,"lb":0.9928583,"mtp1":0.3688241,"mtp2":0.3964544,"gn":0.381},{"t":"2026-10-08 10:34:45","step":255,"ms":9146.5,"tflops":95.6,"lr":3.348045e-06,"lm":0.3834603,"lb":0.9913589,"mtp1":0.3675931,"mtp2":0.3950481,"gn":0.357},{"t":"2026-10-08 10:35:31","step":260,"ms":9168.0,"tflops":95.4,"lr":3.285057e-06,"lm":0.3790229,"lb":0.9912583,"mtp1":0.362724,"mtp2":0.389696,"gn":0.341},{"t":"2026-10-08 10:36:17","step":265,"ms":9148.9,"tflops":95.6,"lr":3.221621e-06,"lm":0.3830201,"lb":0.9902262,"mtp1":0.3662541,"mtp2":0.3936335,"gn":0.373},{"t":"2026-10-08 10:37:03","step":270,"ms":9168.3,"tflops":95.4,"lr":3.15779e-06,"lm":0.3831805,"lb":0.9900335,"mtp1":0.3680999,"mtp2":0.3947878,"gn":0.402},{"t":"2026-10-08 10:37:48","step":275,"ms":9149.9,"tflops":95.6,"lr":3.093618e-06,"lm":0.3791217,"lb":0.9887312,"mtp1":0.3636274,"mtp2":0.3895852,"gn":0.348},{"t":"2026-10-08 10:38:34","step":280,"ms":9174.5,"tflops":95.3,"lr":3.029158e-06,"lm":0.3777943,"lb":0.9879379,"mtp1":0.3620675,"mtp2":0.3881467,"gn":0.371},{"t":"2026-10-08 10:39:20","step":285,"ms":9160.1,"tflops":95.4,"lr":2.964465e-06,"lm":0.3800842,"lb":0.9873996,"mtp1":0.3631814,"mtp2":0.3892069,"gn":0.394},{"t":"2026-10-08 10:40:06","step":290,"ms":9157.5,"tflops":95.5,"lr":2.899593e-06,"lm":0.3781824,"lb":0.9873482,"mtp1":0.361087,"mtp2":0.3870987,"gn":0.389},{"t":"2026-10-08 10:40:52","step":295,"ms":9150.7,"tflops":95.5,"lr":2.834595e-06,"lm":0.3755824,"lb":0.9860392,"mtp1":0.3582297,"mtp2":0.3833996,"gn":0.409},{"t":"2026-10-08 10:41:37","step":300,"ms":9157.0,"tflops":95.5,"lr":2.769526e-06,"lm":0.3781579,"lb":0.9848012,"mtp1":0.3600098,"mtp2":0.3855973,"gn":0.392},{"t":"2026-10-08 10:43:25","step":305,"ms":9343.7,"tflops":93.6,"lr":2.704441e-06,"lm":0.3787812,"lb":0.9846873,"mtp1":0.3614795,"mtp2":0.3864654,"gn":0.355},{"t":"2026-10-08 10:44:10","step":310,"ms":9168.5,"tflops":95.4,"lr":2.639395e-06,"lm":0.3773141,"lb":0.9835276,"mtp1":0.3590934,"mtp2":0.3845744,"gn":0.385},{"t":"2026-10-08 10:44:56","step":315,"ms":9132.7,"tflops":95.7,"lr":2.57444e-06,"lm":0.3732063,"lb":0.9827052,"mtp1":0.3554823,"mtp2":0.3803738,"gn":0.36},{"t":"2026-10-08 10:45:42","step":320,"ms":9118.8,"tflops":95.9,"lr":2.509633e-06,"lm":0.3736529,"lb":0.9822227,"mtp1":0.3554764,"mtp2":0.3804981,"gn":0.339},{"t":"2026-10-08 10:46:27","step":325,"ms":9121.5,"tflops":95.8,"lr":2.445027e-06,"lm":0.3734535,"lb":0.9817523,"mtp1":0.3546004,"mtp2":0.3792964,"gn":0.365},{"t":"2026-10-08 10:47:13","step":330,"ms":9115.0,"tflops":95.9,"lr":2.380676e-06,"lm":0.3757662,"lb":0.9812984,"mtp1":0.3561902,"mtp2":0.3808208,"gn":0.371},{"t":"2026-10-08 10:47:58","step":335,"ms":9130.0,"tflops":95.8,"lr":2.316634e-06,"lm":0.3767509,"lb":0.9800441,"mtp1":0.3571571,"mtp2":0.3818916,"gn":0.371},{"t":"2026-10-08 10:48:44","step":340,"ms":9122.6,"tflops":95.8,"lr":2.252955e-06,"lm":0.3721927,"lb":0.9798626,"mtp1":0.3522118,"mtp2":0.3763653,"gn":0.385},{"t":"2026-10-08 10:49:30","step":345,"ms":9127.3,"tflops":95.8,"lr":2.189691e-06,"lm":0.3758261,"lb":0.9794153,"mtp1":0.3552053,"mtp2":0.3797504,"gn":0.355},{"t":"2026-10-08 10:50:15","step":350,"ms":9118.6,"tflops":95.9,"lr":2.126897e-06,"lm":0.3752724,"lb":0.9786701,"mtp1":0.3555994,"mtp2":0.3796893,"gn":0.354},{"t":"2026-10-08 10:51:01","step":355,"ms":9125.6,"tflops":95.8,"lr":2.064624e-06,"lm":0.3771821,"lb":0.9781702,"mtp1":0.3558538,"mtp2":0.3804924,"gn":0.324},{"t":"2026-10-08 10:51:47","step":360,"ms":9177.5,"tflops":95.3,"lr":2.002924e-06,"lm":0.3772223,"lb":0.9780023,"mtp1":0.3561872,"mtp2":0.3808088,"gn":0.363},{"t":"2026-10-08 10:52:32","step":365,"ms":9109.0,"tflops":96.0,"lr":1.941849e-06,"lm":0.3750388,"lb":0.9774252,"mtp1":0.3534124,"mtp2":0.3773204,"gn":0.328},{"t":"2026-10-08 10:53:18","step":370,"ms":9115.1,"tflops":95.9,"lr":1.881451e-06,"lm":0.3737319,"lb":0.9767353,"mtp1":0.352666,"mtp2":0.3770129,"gn":0.333},{"t":"2026-10-08 10:54:03","step":375,"ms":9091.0,"tflops":96.2,"lr":1.82178e-06,"lm":0.3756,"lb":0.9768317,"mtp1":0.3548177,"mtp2":0.3788561,"gn":0.343},{"t":"2026-10-08 10:54:49","step":380,"ms":9092.7,"tflops":96.1,"lr":1.762885e-06,"lm":0.3704247,"lb":0.9763909,"mtp1":0.3486594,"mtp2":0.371983,"gn":0.346},{"t":"2026-10-08 10:55:40","step":385,"ms":10216.2,"tflops":85.6,"lr":1.704816e-06,"lm":0.3736262,"lb":0.9761944,"mtp1":0.3513344,"mtp2":0.3754531,"gn":0.339},{"t":"2026-10-08 10:56:25","step":390,"ms":8965.5,"tflops":97.5,"lr":1.647622e-06,"lm":0.3771333,"lb":0.9759009,"mtp1":0.3550412,"mtp2":0.3788882,"gn":0.35},{"t":"2026-10-08 10:57:10","step":395,"ms":8975.0,"tflops":97.4,"lr":1.59135e-06,"lm":0.3704734,"lb":0.9750698,"mtp1":0.3486634,"mtp2":0.3717789,"gn":0.331},{"t":"2026-10-08 10:57:55","step":400,"ms":8993.0,"tflops":97.2,"lr":1.536048e-06,"lm":0.3772448,"lb":0.9749309,"mtp1":0.3544127,"mtp2":0.378539,"gn":0.364},{"t":"2026-10-08 10:58:55","step":405,"ms":9087.5,"tflops":96.2,"lr":1.481762e-06,"lm":0.3751233,"lb":0.9743111,"mtp1":0.3524398,"mtp2":0.3762989,"gn":0.329},{"t":"2026-10-08 10:59:40","step":410,"ms":8881.1,"tflops":98.4,"lr":1.428537e-06,"lm":0.3711071,"lb":0.9742002,"mtp1":0.3484959,"mtp2":0.3716429,"gn":0.351},{"t":"2026-10-08 11:00:24","step":415,"ms":8888.1,"tflops":98.4,"lr":1.376417e-06,"lm":0.3742333,"lb":0.9738087,"mtp1":0.3507739,"mtp2":0.3741829,"gn":0.333},{"t":"2026-10-08 11:01:08","step":420,"ms":8884.0,"tflops":98.4,"lr":1.325447e-06,"lm":0.3741858,"lb":0.9738983,"mtp1":0.350573,"mtp2":0.373548,"gn":0.313},{"t":"2026-10-08 11:01:53","step":425,"ms":8891.5,"tflops":98.3,"lr":1.275669e-06,"lm":0.3761479,"lb":0.9732586,"mtp1":0.3526052,"mtp2":0.3762128,"gn":0.326},{"t":"2026-10-08 11:02:37","step":430,"ms":8880.0,"tflops":98.5,"lr":1.227125e-06,"lm":0.3748163,"lb":0.9727615,"mtp1":0.351834,"mtp2":0.3751949,"gn":0.323},{"t":"2026-10-08 11:03:22","step":435,"ms":8895.3,"tflops":98.3,"lr":1.179855e-06,"lm":0.371788,"lb":0.9729988,"mtp1":0.3483951,"mtp2":0.3714528,"gn":0.332},{"t":"2026-10-08 11:04:06","step":440,"ms":8908.1,"tflops":98.1,"lr":1.133899e-06,"lm":0.3707299,"lb":0.9726032,"mtp1":0.3475777,"mtp2":0.3705024,"gn":0.329},{"t":"2026-10-08 11:04:51","step":445,"ms":8914.9,"tflops":98.1,"lr":1.089295e-06,"lm":0.374048,"lb":0.972361,"mtp1":0.350516,"mtp2":0.3737427,"gn":0.296},{"t":"2026-10-08 11:05:35","step":450,"ms":8915.3,"tflops":98.1,"lr":1.046081e-06,"lm":0.375899,"lb":0.9721705,"mtp1":0.3512537,"mtp2":0.3743818,"gn":0.34},{"t":"2026-10-08 11:07:13","step":455,"ms":8921.9,"tflops":98.0,"lr":1.004292e-06,"lm":0.3709257,"lb":0.9724088,"mtp1":0.3489103,"mtp2":0.3716945,"gn":0.31},{"t":"2026-10-08 11:07:58","step":460,"ms":8918.9,"tflops":98.0,"lr":9.639649e-07,"lm":0.3710816,"lb":0.9716094,"mtp1":0.3477256,"mtp2":0.3704578,"gn":0.313},{"t":"2026-10-08 11:08:42","step":465,"ms":8914.8,"tflops":98.1,"lr":9.251318e-07,"lm":0.3728853,"lb":0.971757,"mtp1":0.3495461,"mtp2":0.3722114,"gn":0.323},{"t":"2026-10-08 11:09:27","step":470,"ms":8907.7,"tflops":98.2,"lr":8.878257e-07,"lm":0.3743971,"lb":0.9716658,"mtp1":0.3501753,"mtp2":0.3733926,"gn":0.301},{"t":"2026-10-08 11:10:11","step":475,"ms":8914.0,"tflops":98.1,"lr":8.520778e-07,"lm":0.3720035,"lb":0.9716431,"mtp1":0.3479914,"mtp2":0.3707036,"gn":0.321},{"t":"2026-10-08 11:10:56","step":480,"ms":8903.9,"tflops":98.2,"lr":8.179181e-07,"lm":0.3706231,"lb":0.9715098,"mtp1":0.3462589,"mtp2":0.368841,"gn":0.323},{"t":"2026-10-08 11:11:40","step":485,"ms":8901.1,"tflops":98.2,"lr":7.853752e-07,"lm":0.369883,"lb":0.9708806,"mtp1":0.3465618,"mtp2":0.3687483,"gn":0.339},{"t":"2026-10-08 11:12:25","step":490,"ms":8906.5,"tflops":98.2,"lr":7.544762e-07,"lm":0.371591,"lb":0.9705701,"mtp1":0.3469664,"mtp2":0.3694793,"gn":0.314},{"t":"2026-10-08 11:13:09","step":495,"ms":8908.3,"tflops":98.1,"lr":7.252469e-07,"lm":0.3694913,"lb":0.9709388,"mtp1":0.345137,"mtp2":0.3673581,"gn":0.304},{"t":"2026-10-08 11:13:54","step":500,"ms":8907.4,"tflops":98.2,"lr":6.977119e-07,"lm":0.3724095,"lb":0.9707257,"mtp1":0.3481084,"mtp2":0.3708029,"gn":0.302},{"t":"2026-10-08 11:14:54","step":505,"ms":9111.9,"tflops":95.9,"lr":6.718943e-07,"lm":0.3702687,"lb":0.9702139,"mtp1":0.3459728,"mtp2":0.368719,"gn":0.303},{"t":"2026-10-08 11:15:39","step":510,"ms":8890.5,"tflops":98.3,"lr":6.478156e-07,"lm":0.3709414,"lb":0.970379,"mtp1":0.3467435,"mtp2":0.3693213,"gn":0.296},{"t":"2026-10-08 11:16:23","step":515,"ms":8883.6,"tflops":98.4,"lr":6.254959e-07,"lm":0.3724132,"lb":0.970649,"mtp1":0.3483671,"mtp2":0.3710985,"gn":0.296},{"t":"2026-10-08 11:17:08","step":520,"ms":8878.7,"tflops":98.5,"lr":6.049539e-07,"lm":0.3733582,"lb":0.9706429,"mtp1":0.3480687,"mtp2":0.3702691,"gn":0.302},{"t":"2026-10-08 11:17:52","step":525,"ms":8893.4,"tflops":98.3,"lr":5.862069e-07,"lm":0.3740819,"lb":0.9702023,"mtp1":0.3496708,"mtp2":0.3724638,"gn":0.296},{"t":"2026-10-08 11:18:37","step":530,"ms":8895.5,"tflops":98.3,"lr":5.692705e-07,"lm":0.3720875,"lb":0.9699786,"mtp1":0.3471991,"mtp2":0.3695241,"gn":0.298},{"t":"2026-10-08 11:19:21","step":535,"ms":8876.9,"tflops":98.5,"lr":5.541589e-07,"lm":0.3733403,"lb":0.9699549,"mtp1":0.3482507,"mtp2":0.3710093,"gn":0.293},{"t":"2026-10-08 11:20:05","step":540,"ms":8878.8,"tflops":98.5,"lr":5.408847e-07,"lm":0.3694975,"lb":0.9698407,"mtp1":0.3445204,"mtp2":0.3665376,"gn":0.297},{"t":"2026-10-08 11:20:50","step":545,"ms":8901.3,"tflops":98.2,"lr":5.29459e-07,"lm":0.3732647,"lb":0.969624,"mtp1":0.3473895,"mtp2":0.3703861,"gn":0.312},{"t":"2026-10-08 11:21:34","step":550,"ms":8912.6,"tflops":98.1,"lr":5.198915e-07,"lm":0.374129,"lb":0.9694614,"mtp1":0.348747,"mtp2":0.3717318,"gn":0.282},{"t":"2026-10-08 11:22:19","step":555,"ms":8915.2,"tflops":98.1,"lr":5.1219e-07,"lm":0.3720438,"lb":0.9697748,"mtp1":0.3468985,"mtp2":0.3692509,"gn":0.292},{"t":"2026-10-08 11:23:03","step":560,"ms":8849.5,"tflops":98.8,"lr":5.063611e-07,"lm":0.3696623,"lb":0.9697667,"mtp1":0.3446604,"mtp2":0.3666894,"gn":0.286},{"t":"2026-10-08 11:23:48","step":565,"ms":8846.1,"tflops":98.8,"lr":5.024096e-07,"lm":0.3687178,"lb":0.9698278,"mtp1":0.3438722,"mtp2":0.3654257,"gn":0.295},{"t":"2026-10-08 11:24:32","step":570,"ms":8830.7,"tflops":99.0,"lr":5.003389e-07,"lm":0.375509,"lb":0.9693379,"mtp1":0.3507634,"mtp2":0.3738895,"gn":0.286}],"val":[{"step":100,"loss":0.3939975},{"step":200,"loss":0.38316},{"step":300,"loss":0.3772646},{"step":400,"loss":0.3734392},{"step":500,"loss":0.3713923},{"step":573,"loss":0.3706394}],"bench":{"A: TP2·EP8·selective":{"steps":[{"t":"2026-10-08 09:31:45","step":1,"ms":127261.7,"tflops":6.9,"lr":2.5e-06,"lm":1.123324,"lb":1.213968,"mtp1":2.038301,"mtp2":2.218935,"gn":11.818},{"t":"2026-10-08 09:31:55","step":2,"ms":9916.4,"tflops":88.2,"lr":5e-06,"lm":1.119274,"lb":1.211862,"mtp1":2.048743,"mtp2":2.229358,"gn":11.891},{"t":"2026-10-08 09:32:04","step":3,"ms":9728.9,"tflops":89.9,"lr":4.979043e-06,"lm":1.098601,"lb":1.211328,"mtp1":2.007042,"mtp2":2.186274,"gn":11.543},{"t":"2026-10-08 09:32:14","step":4,"ms":9841.5,"tflops":88.8,"lr":4.916564e-06,"lm":1.046343,"lb":1.210602,"mtp1":1.879183,"mtp2":2.06181,"gn":10.128},{"t":"2026-10-08 09:32:24","step":5,"ms":9628.0,"tflops":90.8,"lr":4.813725e-06,"lm":0.9054722,"lb":1.202243,"mtp1":1.608855,"mtp2":1.794428,"gn":7.341},{"t":"2026-10-08 09:32:33","step":6,"ms":9619.1,"tflops":90.9,"lr":4.672444e-06,"lm":0.7693953,"lb":1.190246,"mtp1":1.279229,"mtp2":1.443657,"gn":4.706},{"t":"2026-10-08 09:32:43","step":7,"ms":9638.5,"tflops":90.7,"lr":4.49535e-06,"lm":0.7363907,"lb":1.1925,"mtp1":1.241409,"mtp2":1.395513,"gn":4.349},{"t":"2026-10-08 09:32:53","step":8,"ms":9624.1,"tflops":90.9,"lr":4.285745e-06,"lm":0.7057753,"lb":1.187348,"mtp1":1.170071,"mtp2":1.308448,"gn":3.751},{"t":"2026-10-08 09:33:02","step":9,"ms":9624.5,"tflops":90.9,"lr":4.047531e-06,"lm":0.6385916,"lb":1.185605,"mtp1":1.001707,"mtp2":1.121901,"gn":3.033},{"t":"2026-10-08 09:33:12","step":10,"ms":9573.9,"tflops":91.3,"lr":3.785146e-06,"lm":0.6059965,"lb":1.184286,"mtp1":0.9137207,"mtp2":1.032836,"gn":3.27},{"t":"2026-10-08 09:33:21","step":11,"ms":9538.4,"tflops":91.7,"lr":3.503479e-06,"lm":0.5954787,"lb":1.177807,"mtp1":0.8756985,"mtp2":0.9854797,"gn":2.705},{"t":"2026-10-08 09:33:31","step":12,"ms":9510.9,"tflops":91.9,"lr":3.207776e-06,"lm":0.5772599,"lb":1.181169,"mtp1":0.8450475,"mtp2":0.9483358,"gn":2.263},{"t":"2026-10-08 09:33:40","step":13,"ms":9502.5,"tflops":92.0,"lr":2.903545e-06,"lm":0.5669239,"lb":1.177801,"mtp1":0.8137581,"mtp2":0.9115717,"gn":1.873},{"t":"2026-10-08 09:33:50","step":14,"ms":9520.7,"tflops":91.8,"lr":2.596455e-06,"lm":0.5505617,"lb":1.180888,"mtp1":0.7871922,"mtp2":0.8813523,"gn":1.561},{"t":"2026-10-08 09:33:59","step":15,"ms":9538.2,"tflops":91.7,"lr":2.292224e-06,"lm":0.5327023,"lb":1.18374,"mtp1":0.762699,"mtp2":0.8573798,"gn":1.357},{"t":"2026-10-08 09:34:09","step":16,"ms":9468.1,"tflops":92.3,"lr":1.996521e-06,"lm":0.5223508,"lb":1.181312,"mtp1":0.7379791,"mtp2":0.8308154,"gn":1.198},{"t":"2026-10-08 09:34:18","step":17,"ms":9487.0,"tflops":92.2,"lr":1.714854e-06,"lm":0.5174458,"lb":1.181929,"mtp1":0.7262595,"mtp2":0.8203375,"gn":1.123},{"t":"2026-10-08 09:34:28","step":18,"ms":9524.7,"tflops":91.8,"lr":1.452469e-06,"lm":0.5153279,"lb":1.184438,"mtp1":0.7190809,"mtp2":0.8107476,"gn":1.102},{"t":"2026-10-08 09:34:37","step":19,"ms":9482.6,"tflops":92.2,"lr":1.214255e-06,"lm":0.5106323,"lb":1.182602,"mtp1":0.7040884,"mtp2":0.796831,"gn":1.008},{"t":"2026-10-08 09:34:47","step":20,"ms":9451.0,"tflops":92.5,"lr":1.00465e-06,"lm":0.5054573,"lb":1.183073,"mtp1":0.6920719,"mtp2":0.7830021,"gn":0.93},{"t":"2026-10-08 09:34:56","step":21,"ms":9451.1,"tflops":92.5,"lr":8.275563e-07,"lm":0.5041721,"lb":1.182339,"mtp1":0.6827972,"mtp2":0.7747958,"gn":0.9},{"t":"2026-10-08 09:35:06","step":22,"ms":9417.9,"tflops":92.8,"lr":6.862746e-07,"lm":0.5020316,"lb":1.181557,"mtp1":0.6741965,"mtp2":0.7640173,"gn":0.817},{"t":"2026-10-08 09:35:15","step":23,"ms":9401.1,"tflops":93.0,"lr":5.834361e-07,"lm":0.4977126,"lb":1.182207,"mtp1":0.6645889,"mtp2":0.7543899,"gn":0.761},{"t":"2026-10-08 09:35:25","step":24,"ms":9370.6,"tflops":93.3,"lr":5.209566e-07,"lm":0.4883382,"lb":1.17777,"mtp1":0.6562853,"mtp2":0.7443321,"gn":0.717},{"t":"2026-10-08 09:35:34","step":25,"ms":9346.5,"tflops":93.6,"lr":5e-07,"lm":0.5047987,"lb":1.178781,"mtp1":0.666554,"mtp2":0.7577463,"gn":0.699}],"oom":false,"mem_max_gb":64.683},"B: TP1·EP8·none":{"steps":[{"t":"2026-10-08 09:43:22","step":1,"ms":99360.4,"tflops":8.8,"lr":2.5e-06,"lm":1.123487,"lb":1.214093,"mtp1":2.037824,"mtp2":2.220309,"gn":11.808}],"oom":true,"mem_max_gb":73.72},"C: TP1·EP8·selective":{"steps":[{"t":"2026-10-08 09:48:15","step":1,"ms":104080.1,"tflops":8.4,"lr":2.5e-06,"lm":1.123487,"lb":1.214093,"mtp1":2.037824,"mtp2":2.220309,"gn":11.82}],"oom":true,"mem_max_gb":64.423}},"eval":{"base":{"questions":600,"k":4,"accuracy":0.89625,"accuracy_by_type":{"chase_rate":0.7775,"milestone":0.99375,"run_rate":0.9175},"mean_tokens":1699.9125,"truncated_rate":0.049166666666666664,"no_answer_rate":0.049166666666666664,"tokens_by_type":{"run_rate":1258.44125,"chase_rate":2759.355,"milestone":1081.94125},"tokens_hist":[1384,2090,1171,571,3288,3471,3545,1646,1220,964,1258,894,564,1505,479,597,1463,6144,3282,1763,1355,1201,1163,1527,515,496,681,2262,1730,6030,1427,6144,760,713,705,937,1131,1104,6144,6144,2656,1528,2213,1850,866,1074,612,794,647,678,585,773,857,3975,1016,2432,1391,654,1332,706,1566,767,549,974,1652,1888,1135,1247,680,897,595,1495,510,624,423,554,322,1034,433,543,857,753,557,791,2222,4481,1244,1109,1586,6144,2690,552,1520,1205,872,1502,962,692,1194,798,2710,5697,1360,2962,1574,733,1080,1120,1727,1198,660,930,3259,2301,2535,2244,735,1150,1094,589,647,859,594,705,2588,789,655,593,697,689,708,1116,1307,1667,667,686,2024,4517,926,2712,503,853,802,723,1096,1134,647,1737,1608,5983,2031,3464,1007,968,882,1463,872,1567,1014,1208,4355,1958,4932,1532,1558,903,1104,758,907,946,571,1581,2430,3601,1461,3207,1002,1032,800,1059,592,1680,850,1141,2132,4469,2976,4031,758,956,1266,1496,632,1042,501,435,1637,3262,877,709,451,780,453,961,940,2729,3427,652,1449,931,3804,6144,1137,929,823,640,416,473,405,708,1019,821,1571,1675,520,1353,616,780,2070,3503,1216,1304,4948,5197,6144,568,1433,813,1339,2118,1824,2627,1231,747,1390,3443,2072,2366,660,752,632,1068,743,910,947,2225,2358,1977,2364,5902,892,978,960,913,960,473,347,548,626,474,708,1054,1430,1124,602,1291,750,3949,643,495,3671,2174,1350,5585,718,1222,821,1951,594,898,343,999,6144,2175,1187,1269,612,912,753,704,2230,1973,2021,989,3844,6144,2079,2204,1490,1025,1163,914,880,3639,2650,840,5722,1445,4574,3735,1322,827,1878,888,769,606,815,741,5091,5429,1473,1806,1188,748,1448,820,872,1263,1790,1209,2839,3382,4194,6144,6144,913,978,790,891,626,1461,421,6144,1851,1759,2837,1497,855,969,1503,3461,608,941,554,6144,6144,549,3217,1484,1647,3165,736,437,1420,389,574,652,937,526,1019,1118,3669,1801,1026,906,606,724,1876,1458,3908,2635,1442,756,658,629,636,1379,1064,476,905,1675,1837,1013,2189,1302,831,701,755,808,5172,4411,1319,954,6144,6144,630,644,1252,1231,1296,898,3536,505,541,1861,2969,6144,1130,808,957,1075,859,1515,1463,1255,1849,2613,6144,4051,1249,970,1131,1292,1011,2976,6144,1316,1219,846,5126,1512,1398,1847,1295,1240,745,2476,951,1237,1930,6144,6144,6144,6144,760,1245,1181,1358,886,3149,752,949,2662,2898,3429,3017,1248,870,1041,1042,1027,1682,486,1049,1768,4953,1427,4100,865,1369,881,578,590,1106,2509,750,1384,3485,1010,1169,937,2269,1272,1008,813,2979,1969,636,2322,2635,3187,6144,989,2409,873,901,735,6144,2176,1119,5438,3442,6144,6144,721,847,1010,1193,2766,2150,919,778,5565,6144,3579,2500,866,1172,537,1160,1131,1350,615,670,3232,2578,1123,2016,626,842,962,628,598,417,511,416,6144,913,1001,3053,1268,985,913,688,451,545,987,458,929,1315,522,706,1019,1349,1221,804,591,581,1402,500,880,1697,1752,863,906,1262,994,736,1697,1287,713,916,1870,603,2023,2286,821,575,668,782,1502,4707,6144,1736,609,2305,720,711,1073,967,1082,911,642,790,559,458,726,760,513,615,1204,892,620,878,1064,818,1423,990,3409,2360,1383,3595,1397,713,753,982,3066,919,1244,698,1790,1781,2071,2316,1335,1295,849,1120,591,837,409,545,6144,1002,822,776,965,943,1089,666,547,1293,522,994,960,5400,1844,1586,1231,840,1198,892,996,1029,710,799,2694,2600,4091,2318,1050,969,1163,725,995,1009,2560,2954,4062,6144,6144,6144,1138,3165,4536,784,1556,1115,3728,1306,1939,5966,2061,3483,1149,668,1105,762,488,864,550,1331,2503,2050,2064,1064,857,2003,3116,1130,2494,1531,4365,2655,1164,999,6144,761,699,1548,1397,775,1173,760,945,3211,2752,840,1912,5596,941,847,545,932,669,952,492,637,1567,1028,741,962,626,1864,1357,885,767,3851,1479,1410,5505,6144,2841,6144,683,899,678,744,998,1051,1087,539,3608,1106,1704,2378,1130,1028,1210,1153,1009,2735,566,610,2328,2018,4266,2399,2769,942,1494,1762,510,499,621,450,2786,955,1083,6144,674,920,980,1071,2554,850,2331,3093,4278,2489,1196,1952,1225,1658,1831,1003,1122,746,520,578,1303,670,691,906,788,1342,1228,1206,530,2390,884,567,2353,5252,2167,1814,1106,1069,1461,1073,3677,1364,912,505,3730,2552,1381,1807,765,1435,851,621,810,815,488,516,1163,686,1340,1646,1128,3362,1074,781,699,669,510,606,932,836,761,1161,909,1109,979,1208,603,2008,886,809,2420,3192,6144,2483,867,1745,633,892,1095,1570,587,3299,1162,4630,1366,1564,741,1110,973,1051,515,1693,407,1093,596,895,706,603,870,2304,521,837,826,2295,1188,1217,6144,954,875,1025,794,1439,829,837,816,2463,825,1911,3882,2237,1997,6144,1159,1124,625,842,1343,1394,574,526,5182,2990,1201,2316,1143,890,1507,1419,1171,762,2106,1771,4430,3405,6144,2990,715,855,743,767,583,1110,463,606,950,859,606,1245,1237,720,638,1113,415,587,729,831,1373,6144,6090,863,1457,1368,1490,714,1710,1111,360,621,907,3394,1126,1977,1347,954,1752,1564,1011,1344,388,1250,1252,6144,944,2894,758,1772,673,1129,1108,1313,1253,1318,1969,4050,1388,1383,641,872,892,988,2653,769,723,1099,4782,3207,1701,3013,1225,1156,865,709,1592,1432,1135,696,3033,5581,3099,2215,1406,1205,1517,1300,1042,1843,797,579,2253,2685,1493,5575,688,920,1130,503,5220,6144,596,2894,3203,972,6138,6144,724,1961,845,2196,397,1659,1557,422,1248,969,1932,948,971,639,1225,793,339,898,469,949,649,467,625,646,677,1237,688,849,458,487,715,396,1520,1107,1112,875,977,1333,1363,776,993,1510,777,1634,687,2272,1332,1385,861,752,717,641,804,434,418,904,807,1245,528,1390,1077,853,740,987,6144,3123,6144,2913,802,6144,6144,512,1083,916,872,2246,613,2530,476,422,1899,4320,1023,2550,757,902,789,775,605,1024,429,478,1074,819,479,805,1374,1202,857,1111,1962,3850,1006,918,2290,5338,1004,6144,924,961,1043,921,782,683,772,2712,6144,2764,2651,3191,1666,1274,1075,1938,515,550,661,843,598,760,787,3227,861,1116,1013,878,1100,1008,843,508,3753,3281,3627,6144,815,983,1584,743,883,722,499,1075,1184,3804,1380,899,615,992,987,1120,567,689,552,586,779,1068,739,579,1291,3355,1370,791,412,818,581,586,700,631,605,518,873,1226,1232,1157,700,2225,4821,1830,4629,2277,4215,6144,1287,1152,1240,1587,1325,1742,2160,923,1171,6144,2017,4889,638,1060,1491,676,659,1520,1038,797,1883,3036,5776,650,997,667,602,469,488,807,1040,556,2816,906,1658,2649,747,872,1043,737,1181,1200,631,1632,5971,2245,6144,3976,688,1201,599,822,1908,711,1231,892,2160,3531,6144,3292,1413,804,864,707,1160,1017,594,940,1705,4886,3979,3148,1053,1090,1019,1095,524,3262,599,726,911,6144,2575,6144,1058,1729,2039,1261,739,624,658,508,1056,1066,885,947,872,995,1006,973,4908,6144,1353,886,826,604,4176,1684,944,1960,729,1153,1475,1215,897,943,1306,1205,1925,6144,1085,1121,863,1620,839,794,831,732,2308,2708,3650,1905,1479,791,939,1305,843,6144,1008,2885,3742,4848,6144,6144,1289,2620,1042,1244,750,596,547,738,6144,6144,1528,6144,837,1817,844,1008,1223,1021,774,1573,940,2945,3671,2344,944,1101,3038,1400,1779,3738,3162,1179,2033,6144,4318,3630,869,738,1314,1258,1335,1126,840,916,2172,2128,1939,3588,2026,1027,745,1502,612,1971,705,882,4953,2645,2095,1662,789,781,809,1123,965,1220,1587,828,3106,3630,4376,2841,1404,1113,1103,772,430,2912,733,1953,2509,6144,3190,2107,729,1162,710,1010,827,946,994,631,826,1329,6144,738,738,1180,1484,844,3131,3218,1518,666,6144,1117,3427,1443,1119,1089,1016,1381,808,5378,583,439,2742,2642,1575,2666,784,2556,1194,831,1877,1413,1335,1518,3346,1404,1649,1489,879,782,977,925,677,866,1324,1131,6143,3109,3146,1715,1631,1028,1185,675,805,822,1331,996,3890,2645,3914,1996,1690,1030,807,974,843,630,512,521,1147,2743,752,1054,860,1666,1024,735,563,1029,820,1533,3023,2944,918,2786,598,885,965,927,3378,1579,1068,1880,3619,6144,3775,2352,712,797,1136,904,817,1075,993,516,1747,1484,3191,1625,796,1025,573,695,596,726,1000,680,3613,6144,4495,6144,808,1070,1437,663,883,1139,670,697,2199,1002,392,1152,809,757,625,739,873,883,639,1201,6144,6144,1160,2517,939,1524,751,1366,517,581,656,533,1905,2979,5544,1005,1154,856,1820,1156,1211,2516,1151,2297,2280,5310,1579,1848,857,1068,933,1649,822,2964,1322,887,1212,3795,1432,996,716,736,1431,986,1188,1031,1022,805,5561,6144,5503,5376,913,796,1156,1717,1542,1327,1259,1457,2534,6144,2167,2091,1232,1260,1158,853,522,439,558,637,995,615,502,474,841,1300,1337,684,2087,909,1648,6031,2106,2198,6144,5250,1815,1505,709,1209,1011,1264,478,631,6144,6144,924,6144,846,917,1348,799,1939,1118,1091,1057,6144,6144,6144,2963,806,1404,1222,624,2946,2200,618,6144,6144,2979,6144,515,927,1020,547,655,1037,1193,660,1119,2075,3303,2917,3953,1020,1247,1022,1127,492,2261,2613,3245,1390,6144,825,6144,2174,3325,880,1220,574,3165,1244,1364,2524,3366,1487,6144,724,1091,1267,923,808,772,889,1312,5149,6144,6144,4472,1047,933,845,760,639,1003,714,476,583,1871,1057,956,1509,759,1149,1125,568,758,447,1021,1397,2697,4519,1182,752,1317,922,1190,1121,1196,1001,491,4730,6144,1064,6144,679,1357,1062,1213,942,624,2256,432,1523,6144,1109,2413,1036,926,2619,887,1040,1706,656,654,1898,1111,4203,4979,772,1756,896,1531,724,1030,631,903,948,2121,2083,2791,1348,1190,885,989,666,1381,740,426,598,1111,923,661,524,1158,864,1026,651,335,616,570,2203,2330,1478,2200,815,1132,890,940,1190,879,1931,2706,6144,2531,2155,5225,1224,718,974,2041,726,2297,858,1454,3540,986,2145,2431,903,1219,915,922,3405,1521,2613,767,3078,1611,6144,3372,952,1018,1130,998,1622,3170,1474,3488,1205,2679,1678,1415,1559,988,713,866,793,957,2001,539,903,2229,793,2519,764,1139,1405,1276,232,527,767,466,697,566,577,505,1383,573,1115,821,1750,651,567,2189,784,4194,483,4807,1546,1012,543,737,643,2960,456,726,513,1639,1319,961,1122,727,1182,935,1399,3464,1943,4886,1321,5048,5065,2887,918,723,616,689,562,512,839,417,1463,1094,1355,1373,900,1089,874,659,1147,1231,1420,1062,2162,2879,2528,2597,870,1372,1401,1683,671,783,1420,725,1904,1545,823,717,771,974,1244,642,585,1063,581,726,2805,4677,3790,2046,1272,1173,1181,846,558,986,516,545,6144,2793,2244,1563,845,1275,967,1508,545,1161,388,442,2349,2373,1605,636,779,2045,574,792,2985,1176,544,768,3775,5674,2680,2414,1110,1944,936,1426,506,723,835,637,4414,5020,1170,4268,1059,965,795,911,746,654,1124,632,5618,2130,1380,1533,889,1136,440,936,447,932,1082,446,1016,981,4870,3733,929,914,1557,769,931,874,1349,1390,1221,1830,2439,1827,986,793,1011,1140,900,908,2117,775,6144,4988,6144,1440,837,1371,1132,763,1938,709,1210,2528,2862,6144,6144,6144,1776,1457,1413,1206,1499,954,513,1805,6144,1779,3373,4322,958,1449,837,708,1233,919,1031,1276,1997,2079,4679,1019,780,1419,1082,525,503,598,549,3253,3763,2449,6144,1215,597,1304,1228,1482,969,783,775,755,743,1417,838,1475,1030,1173,1567,1299,1003,1870,868,750,2108,2037,3833,2688,651,907,492,650,615,723,713,576,1009,507,576,987,793,600,618,787,669,2069,814,720,6144,6144,2057,2835,792,2119,724,699,645,1051,963,874,1830,2502,1877,6144,712,1076,777,1055,2888,814,3462,886,5057,3256,1369,6144,1031,1126,2079,916,565,772,404,521,997,930,566,784,999,2270,982,779,575,755,568,1158,669,687,448,455,1512,1088,1237,1418,719,614,749,763,1555,2229,1555,2051,692,1135,957,1086,1051,1732,1454,851,3457,4048,1294,6144,620,788,1345,791,1044,1495,3084,911,2971,6144,3961,4711,803,1796,578,728,756,1132,5734,1733,5809,4703,6144,1412,736,820,4663,2001,1731,1599,558,579,958,1865,4900,1668,671,937,812,660,1668,952,1101,1395,6144,6144,771,6144,1015,935,474,797,1374,1307,693,1110,2768,4031,6144,1874,839,1181,1066,632,2171,1163,999,2397,6144,2071,929,3611,2949,783,760,1161]},"sft-full-e1":{"questions":600,"k":4,"accuracy":0.9695833333333334,"accuracy_by_type":{"chase_rate":0.94125,"milestone":0.99625,"run_rate":0.97125},"mean_tokens":518.7841666666667,"truncated_rate":0.0,"no_answer_rate":0.0,"tokens_by_type":{"run_rate":277.8975,"chase_rate":705.90875,"milestone":572.54625},"tokens_hist":[254,201,433,253,637,761,737,590,653,366,639,381,348,305,302,281,687,747,738,633,524,677,597,496,251,222,153,224,348,425,756,408,924,388,440,920,368,348,317,257,414,518,600,578,451,451,585,575,284,211,215,328,537,524,866,472,612,675,738,759,473,343,453,342,552,389,503,633,511,785,912,620,173,215,243,156,226,351,527,397,504,600,560,474,376,252,270,171,634,541,1268,1022,728,577,772,923,361,294,246,278,505,356,1035,417,671,476,521,558,316,245,299,245,1045,529,725,847,891,537,505,472,239,229,169,220,499,462,421,656,477,526,472,530,276,276,289,270,434,458,441,567,547,591,507,443,439,298,286,352,495,477,577,411,639,558,834,518,324,366,251,314,748,525,820,685,782,593,555,779,241,255,376,332,418,919,640,719,580,581,493,501,330,198,258,157,659,1415,620,615,532,516,442,526,308,202,295,229,383,526,738,1219,820,457,479,505,435,470,227,393,1188,740,585,1264,596,596,508,359,314,191,268,227,613,452,685,396,482,610,436,591,291,247,289,222,1158,1114,925,649,464,1241,652,471,341,320,244,391,546,610,625,1304,318,461,487,343,271,264,257,305,725,727,762,1296,402,578,426,403,181,147,132,167,285,263,354,385,384,323,430,414,236,307,207,325,1181,871,778,662,3093,689,741,682,175,261,232,224,423,540,785,614,506,592,435,575,291,269,382,288,555,1186,1075,602,852,653,604,445,365,368,308,304,717,1250,1393,1108,684,376,489,447,232,176,164,246,619,910,1238,550,491,740,489,485,319,349,325,373,370,626,795,641,434,801,538,268,438,273,246,313,1582,700,858,1334,560,501,2263,756,161,400,411,196,980,1106,1018,1142,449,515,387,1756,204,187,180,176,451,520,553,612,892,1364,789,601,302,332,284,243,440,384,1245,515,385,472,554,559,302,280,277,457,694,722,686,616,401,966,429,460,285,472,289,315,712,684,889,1008,628,523,497,419,228,203,245,209,402,689,545,550,833,597,1062,600,351,318,356,304,1065,1043,598,1246,552,599,542,923,283,295,305,268,1172,593,1207,904,511,634,673,544,352,303,305,342,728,632,1486,624,558,582,566,457,481,343,305,314,543,779,489,611,541,599,473,353,368,262,266,339,421,696,644,506,585,578,562,397,337,271,201,281,322,860,551,591,659,776,540,464,363,350,288,331,801,563,680,1008,757,374,522,492,336,343,321,387,1498,1361,914,544,549,681,444,386,347,312,382,270,978,686,614,1088,553,981,636,472,278,276,205,315,471,461,971,776,544,382,471,420,181,106,155,192,507,452,709,455,337,480,543,378,112,156,149,163,428,312,540,462,650,436,447,390,289,120,282,232,616,456,576,2040,1820,723,551,859,272,257,199,300,603,432,637,571,469,592,335,522,160,382,231,240,759,515,511,551,644,1952,503,967,258,168,256,169,318,474,378,475,485,558,459,431,183,205,317,387,799,581,1070,502,477,359,493,334,343,343,230,278,448,555,1148,594,815,795,451,544,356,225,125,218,398,529,662,467,514,1021,558,573,137,174,195,180,566,784,551,840,512,612,593,483,414,307,314,370,559,701,832,907,502,492,667,666,363,245,212,222,1095,757,611,1290,592,898,545,459,317,329,339,249,610,736,924,956,735,593,497,461,270,227,210,253,1719,697,551,1242,465,493,554,406,364,640,292,248,598,537,850,939,481,671,435,454,285,295,324,325,349,450,585,570,402,576,450,383,205,154,257,216,618,603,380,390,277,459,468,341,230,271,289,227,957,804,637,1387,351,663,459,330,355,198,331,433,565,386,783,547,522,377,593,555,294,238,335,235,795,798,1189,1356,1008,513,441,1720,244,270,209,258,583,844,651,481,370,604,526,628,308,293,223,356,1353,701,1348,1244,552,567,943,328,220,179,194,190,550,365,310,440,262,322,417,403,320,300,279,227,508,561,740,735,385,756,765,562,256,205,230,306,370,575,508,596,358,402,699,630,261,149,165,159,424,271,276,382,515,913,678,564,164,208,231,178,325,408,494,452,485,516,562,585,324,236,225,271,305,795,817,1090,701,379,615,445,339,358,267,361,617,388,660,477,829,604,430,692,191,156,216,191,282,300,381,452,547,595,603,352,259,403,303,419,677,484,619,523,630,495,500,672,251,260,211,327,794,655,655,634,660,637,855,569,299,327,228,345,472,681,522,478,757,428,568,516,271,378,361,272,551,553,644,534,655,546,788,456,244,152,215,205,926,501,283,283,680,641,369,356,306,174,219,196,504,518,1443,1886,556,378,454,345,245,174,237,378,835,522,528,439,719,1046,515,756,182,215,255,338,498,1141,685,547,533,557,499,500,249,343,277,250,487,491,762,727,552,449,436,625,359,278,351,238,494,707,560,710,563,526,557,561,464,321,248,312,525,485,551,599,665,358,452,437,258,303,264,244,651,630,1055,1112,641,744,431,437,322,347,245,601,571,1086,1228,1130,465,570,523,670,306,215,213,299,1213,743,599,542,444,539,409,301,216,163,178,204,409,220,482,535,453,637,433,376,197,277,169,208,423,380,753,429,383,497,499,292,389,406,310,243,492,640,648,769,978,542,623,570,210,160,134,205,314,356,438,346,706,671,670,481,326,321,205,260,593,904,924,1211,1042,546,470,340,270,216,200,282,1925,489,469,655,307,609,376,251,149,252,191,192,663,711,534,378,480,596,547,470,449,389,374,301,643,389,617,645,425,600,498,505,387,315,221,236,907,487,416,587,392,441,698,370,199,255,188,215,594,375,553,219,502,545,402,320,352,312,275,258,776,751,580,571,446,528,534,433,263,293,229,356,974,552,1122,645,441,537,552,486,130,137,304,178,436,412,355,325,644,562,630,569,205,125,229,163,275,506,417,566,880,795,472,431,350,464,318,413,785,496,681,559,441,414,504,458,380,358,321,315,727,708,612,1088,342,287,397,455,602,243,260,240,658,651,592,506,436,549,478,450,299,327,355,261,367,623,670,613,328,447,560,501,422,332,290,279,1045,813,1068,1114,478,456,480,777,320,310,296,221,624,1065,501,748,819,827,515,713,265,204,150,220,452,528,406,748,496,550,521,724,249,223,212,255,688,815,437,525,624,634,678,404,134,191,197,245,526,448,325,508,430,575,440,550,265,328,443,411,643,1491,578,533,664,1110,501,511,364,293,357,289,742,1174,550,1015,554,721,508,568,361,326,249,256,1164,1135,493,1027,543,384,496,551,343,278,252,326,602,530,559,871,531,655,442,349,276,253,179,224,639,466,643,760,587,732,452,473,326,275,219,236,445,578,702,1198,373,603,534,487,328,264,373,382,1043,609,590,611,1100,595,549,605,299,285,275,288,708,845,802,929,438,520,601,511,353,276,297,323,414,494,930,501,591,544,363,423,344,319,268,457,869,501,500,1047,906,1244,849,538,299,261,272,245,432,719,822,665,266,454,473,605,293,170,197,186,394,573,522,1052,534,520,384,465,294,243,396,326,1222,1700,387,977,610,577,509,545,264,178,321,243,425,604,707,472,647,521,612,1006,365,261,261,371,618,826,1934,842,450,590,476,460,255,199,251,308,519,523,834,966,181,630,477,325,250,271,286,196,569,571,573,485,430,1530,511,475,243,304,261,267,723,428,835,609,378,928,510,483,250,315,316,284,499,1117,760,619,443,591,574,597,229,310,354,226,1173,483,650,733,453,527,426,523,236,257,262,355,876,1132,850,709,408,470,496,458,276,387,192,327,605,1476,753,1424,473,454,917,1392,104,181,190,182,206,405,696,742,411,532,682,429,279,194,287,256,1085,610,506,1117,485,496,474,338,264,336,228,197,617,829,750,700,494,445,510,378,271,231,314,287,412,725,958,718,509,570,679,470,407,265,280,338,374,725,479,1322,585,763,512,679,286,345,294,262,1149,1945,1670,1302,625,530,566,584,289,194,257,311,782,716,478,958,677,513,454,542,222,214,238,186,251,304,399,445,397,678,621,450,362,279,275,384,738,1372,775,595,867,493,542,438,217,286,229,329,456,809,629,642,662,551,544,541,232,280,387,571,917,712,1021,415,435,621,433,633,472,267,271,349,917,888,1132,1636,977,560,499,564,366,211,229,203,440,535,535,811,437,473,578,383,366,243,307,318,1219,818,482,1856,621,757,487,488,167,346,235,338,514,1006,556,730,523,531,464,435,315,199,316,320,642,515,561,1187,418,479,517,442,248,224,154,130,354,488,477,416,474,629,441,515,252,163,247,244,409,425,1092,627,729,740,536,573,310,383,286,340,720,602,547,1137,398,483,494,497,264,249,293,367,547,568,756,844,528,737,547,482,277,261,310,231,770,715,775,526,404,468,436,494,402,251,286,275,423,441,541,660,498,490,427,485,239,201,222,205,530,507,372,464,454,366,499,434,214,245,238,218,430,624,517,684,493,429,492,454,334,268,339,329,961,817,557,487,1779,896,811,516,304,174,268,304,495,659,934,681,536,751,594,379,319,281,396,255,539,724,752,771,748,456,537,454,268,342,339,325,495,617,693,515,579,1083,599,480,269,339,307,308,600,2075,1011,2113,524,793,538,753,187,88,135,150,397,348,465,454,502,516,459,442,969,252,422,288,446,474,939,1261,688,728,638,544,186,173,197,211,474,317,463,756,1477,1011,543,521,363,494,186,277,553,756,1005,641,741,599,537,333,181,212,146,212,645,668,674,387,693,489,598,763,288,170,336,338,633,770,822,614,484,586,529,725,279,189,254,228,451,600,555,499,579,378,417,422,312,267,232,366,363,548,677,448,530,565,535,490,318,204,271,165,897,569,559,812,461,974,585,868,214,156,204,214,489,561,863,468,684,829,644,567,321,345,244,262,508,1019,1090,622,425,423,249,420,262,183,190,327,410,439,501,666,343,309,460,510,295,245,204,288,754,761,571,963,726,756,571,612,289,243,282,264,685,763,563,573,473,569,552,318,394,209,266,487,940,1422,585,1590,1172,382,728,630,301,368,231,297,1120,645,671,935,636,544,474,416,352,370,268,491,736,983,1061,539,710,967,615,509,444,400,346,382,543,812,2084,1370,499,665,1030,694,246,327,315,341,676,705,868,686,1105,369,496,373,242,262,261,372,744,1611,2565,614,512,726,609,504,252,250,276,285,691,614,380,1040,637,739,622,503,285,266,302,231,411,656,451,643,467,748,444,365,228,208,198,191,307,362,584,523,524,493,584,439,402,243,337,350,588,879,547,1045,516,456,445,432,278,266,222,240,765,617,1355,1018,450,488,614,436,357,299,387,424,522,761,699,632,547,1021,1256,1064,187,214,207,217,515,522,292,622,626,556,477,876,235,103,219,118,268,368,558,507,453,631,430,496,369,224,221,223,572,533,549,666,625,542,550,632,351,487,338,308,954,629,920,1077,505,442,605,338,367,351,401,436,932,613,764,635,784,608,563,414,368,407,318,311,727,1125,652,2889,533,619,758,556,188,355,268,298,616,422,598,743,607,587,558,452,287,242,257,423,891,619,492,1155,580,518,548,451,284,347,363,275,513,612,464,1399,416,529,652,566,329,290,297,341,682,1019,573,703,596,497,547,611]}},"examples":{"run_rate":{"id":"1333926-1-8974-run_rate","qtype":"run_rate","gold":4.8,"pred":4.8,"correct":true,"tokens":254,"finish":"stop","text":"We need answer user's question. Need compute current run rate runs per over. Given after 6.4 overs (overs.balls) they are 32/4. Run rate = runs / overs decimal. 6.4 overs means 6 overs and 4 balls = 6 + 4/6 = 6.666... overs. Runs 32. RPO = 32 / (20/3) = 32*3/20 = 96/20 = 4.8. Rounded 2 decimals = 4.80. Need maybe consider last delivery? D Wotu bowled last delivery not relevant. Just answer. Need step-by-step? The prompt says work through problem step by step, then final answer. We can provide concise. Ensure final line 'Final answer: <number>'.<\/think>Overs bowled: 6.4 = 6 overs + 4 balls = 6 + 4/6 = 6.6667 overs.\n\nRun rate = runs ÷ overs = 32 ÷ 6.6667 = 4.80.\n\nFinal answer: 4.80"},"chase_rate":{"id":"1333926-1-8974-chase_rate","qtype":"chase_rate","gold":6.6,"pred":6.6,"correct":true,"tokens":637,"finish":"stop","text":"We need answer user's cricket question. Need compute run rate over rest of innings from point after 6.4 overs, score 32/4, finished 120/20. Need runs scored in remaining overs / overs remaining. 6.4 overs = 6 overs + 4 balls = 6 + 4/6 = 6.6667 overs. Remaining = 20 - 6.6667 = 13.3333 overs. Runs remaining = 120 - 32 = 88. Run rate = 88 / (13 + 1/3) = 88 / (40/3) = 88*3/40 = 264/40 = 6.6 exactly. Round to 2 decimal places 6.60. Need provide final answer line. But let's carefully check if \"after 6.4 overs (cricket notation: overs.balls) they are 32/4\" means 6.4 overs, yes. Last delivery bowled by D Wotu maybe irrelevant. Batsman stats maybe irrelevant. Need run rate over rest of innings from this point. So 6.60 runs per over.\n\nNeed ensure no trap: T20, finished 120. At what run rate did they score over rest of their innings from this point? Since already at 6.4 overs 32, remaining 13.2 overs? Wait cricket notation overs.balls: 6.4 means 6 overs and 4 balls. That's 6 + 4/6 = 6.6667 overs, not decimal 6.4. Remaining balls: total 120 balls, bowled 40 balls (6*6+4=40), remaining 80 balls = 13.3333 overs. Runs remaining 88. RR = 88/(80/6) = 6.6.\n\nNeed final concise with step-by-step maybe. The instruction: work through problem step by step, then give final answer on its own line as 'Final answer: <number>'. We'll include calculations.<\/think>After 6.4 overs, Samoa had scored 32 runs.\n\n- Total innings length: 20 overs = 120 balls  \n- Balls bowled at 6.4 overs: 6 × 6 + 4 = 40 balls  \n- Remaining balls: 120 − 40 = 80 balls  \n- Remaining overs: 80 ÷ 6 = 13.333 overs  \n\nRuns still needed:\n\n- 120 − 32 = 88 runs  \n\nRun rate over the remaining overs:\n\n- 88 ÷ 13.333 = 6.60 runs per over\n\nFinal answer: 6.60"},"milestone":{"id":"1333926-1-8974-milestone","qtype":"milestone","gold":312,"pred":312.0,"correct":true,"tokens":653,"finish":"stop","text":"We need answer user's question. Need compute. Let's parse.\n\nCricket T20 International Samoa v Vanuatu at Independence Park, 2022-09-14. Samoa batting first. After 6.4 overs (cricket notation: overs.balls) they are 32/4. S Sola is on 2 off 13 balls and AJ Michael is on 15 off 10. D Wotu bowled the last delivery.\n\nS Sola wants to reach 50 runs. If S Sola keeps scoring at their own current strike rate (their runs per ball faced so far), how many more balls must S Sola face to reach 50? Round up to a whole number of balls.\n\nNeed compute current strike rate: runs / balls faced = 2/13 runs per ball. Need additional runs to reach 50: 50 - 2 = 48. Balls needed at rate = 48 / (2/13) = 48 * 13/2 = 24*13 = 312. So 312 balls. Round up 312.\n\nCheck if any nuance: \"their own current strike rate\" yes individual. Could there be notational overs? irrelevant. Last delivery bowled? irrelevant. Maybe \"how many more balls must face to reach 50\" from current 2. If at strike rate, 312. But let's be careful: In cricket, a batter can't face infinite balls due to match etc but just calculation. Need final answer line.\n\nNeed maybe mention step-by-step. Ensure final answer: 312. Could there be issue: S Sola on 2 off 13, strike rate = 15.38%. Runs per ball = 2/13. Need 48 runs. 48/(2/13)=312. If considering must reach at least 50, yes. If exact 312 balls. Round up whole number.\n\nDouble-check: current balls faced 13. If score at 2 per 13 balls, to get 48 additional runs: 3 full cycles = 39 balls yield 6 runs? Wait 2/13 per ball; 13 balls gives 2 runs. 48 runs /2 =24 cycles of 13 balls = 312 balls. Yes.\n\nNeed final concise but include steps. final line exactly 'Final answer: 312'.<\/think>S Sola’s current strike rate is:\n\n\\[\n\\frac{2 \\text{ runs}}{13 \\text{ balls}} = \\frac{2}{13} \\text{ runs per ball}\n\\]\n\nRuns still needed to reach 50:\n\n\\[\n50 - 2 = 48\n\\]\n\nBalls needed:\n\n\\[\n\\frac{48}{2/13} = 48 \\times \\frac{13}{2} = 312\n\\]\n\nFinal answer: 312"}},"prep":{"training_rows":458247,"training_rows_dropped_too_long":455,"validation_rows":4000,"reasoning_tokens_mean":459.73530650500715,"reasoning_tokens_p99":1347,"reasoning_tokens_max":3298}}</script>
+<script>
+const M = JSON.parse(document.getElementById('metrics').textContent);
+const $ = (s, r = document) => r.querySelector(s);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmt = (x, d = 1) => Number(x).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = x => fmt(100 * x, 1) + '%';
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- theme ---------- */
+(() => {
+  let saved = null; try { saved = localStorage.getItem('nc-theme'); } catch (e) {}
+  if (saved) document.documentElement.dataset.theme = saved;
+  $('#themeBtn').onclick = () => {
+    const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem('nc-theme', document.documentElement.dataset.theme); } catch (e) {}
+    renderCharts();
+  };
+})();
+
+/* ---------- tiles ---------- */
+const B = M.eval.base, F = M.eval['sft-full-e1'];
+const tile = (k, v, d) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
+$('#tiles').innerHTML = [
+  tile('Benchmark accuracy', pct(F.accuracy), `base ${pct(B.accuracy)} · <b>+${fmt(100 * (F.accuracy - B.accuracy), 1)} pts</b>`),
+  tile('chase_rate accuracy', pct(F.accuracy_by_type.chase_rate), `base ${pct(B.accuracy_by_type.chase_rate)} · <b>+${fmt(100 * (F.accuracy_by_type.chase_rate - B.accuracy_by_type.chase_rate), 1)} pts</b>`),
+  tile('Mean answer length', fmt(F.mean_tokens, 0), `tokens · base ${fmt(B.mean_tokens, 0)} · <b>−${fmt(100 * (1 - F.mean_tokens / B.mean_tokens), 0)}%</b>`),
+  tile('Validation loss', fmt(M.val.at(-1).loss, 3), `from ${fmt(M.val[0].loss, 3)} at step ${M.val[0].step}`),
+  tile('Training time', '1 h 37 m', '573 steps · 1 epoch · 16 × H100'),
+  tile('Throughput', fmt(M.train.at(-1).tflops, 0) + ' TF/s', 'per GPU · 8.8 s / step · TP2·EP8'),
+].join('');
+
+/* ---------- pipeline ---------- */
+const STAGES = [
+  { i: '⬇', t: 'Download', w: 'setup · 6 min', h: 'Container, model and dataset to Lustre',
+    b: ['Imported <code>nvcr.io/nvidia/nemo:26.08.01</code> to a 39 GB squashfs on Lustre', 'Model (62 GB, pinned rev a9904d2) and dataset (2.1 GB) into <code>$HF_HOME</code> on Lustre', 'Probed the image: Megatron-Bridge 0.6.1 ships a verified <code>nemotron_3_5_lightning_sft_config</code> recipe'], m: ['job 6205622', 'interactive · 1 node'] },
+  { i: '🧾', t: 'Prep data', w: 'login node · 52 s', h: 'Chat-format JSONL',
+    b: ['458,702 train rows → system / user / assistant(<code>reasoning_content</code>, <code>content</code>)', 'Dropped 455 rows with >3,300 reasoning tokens, which would be truncated in a 4K pack', '4,000 validation rows sampled from the by-match held-out test split'], m: ['prep_data.py', 'stdlib only'] },
+  { i: '🔁', t: 'HF → Megatron', w: 'import · 3.5 min', h: 'Convert weights to Megatron dist-checkpoint',
+    b: ['<code>run_conversion.py import --device gpu --ep 8</code> on 8 GPUs', '62 GB <code>torch_dist</code> checkpoint, iteration 0', 'Called directly with <code>/opt/venv/bin/python</code>: <code>convert.sh</code>\'s uv env pulled an incompatible huggingface-hub'], m: ['job 6205802', 'interactive · 1 node'] },
+  { i: '📦', t: 'Pack', w: 'one-time · 65 min', h: 'Offline packing to 4,096 tokens',
+    b: ['Chat template applied with the Nemotron tokenizer; loss mask on the assistant turn', '458,247 examples → 73,263 packs (packing factor 6.25, efficiency 97.7%)', 'Single-process tokenization: multi-worker sharing of 458K tensors exhausted mmap (ENOMEM)'], m: ['inside bench job 6206161', 'cached parquet'] },
+  { i: '⏱', t: 'Benchmark', w: '3 layouts · 25 steps', h: 'Pick the parallel layout',
+    b: ['A: TP2·SP·EP8 + selective recompute → <b>9.35 s/step, 65 GB peak</b>', 'B: TP1·EP8 no recompute → OOM (74 GB after step 1)', 'C: TP1·EP8 selective recompute → OOM on step 2'], m: ['jobs 6206161 · 6206659 · 6206681', '2 nodes'] },
+  { i: '🔥', t: 'Full SFT', w: '1 h 37 min', h: 'Full-parameter SFT, 1 epoch',
+    b: ['573 steps × 128 packed sequences (≈524K tokens/step), LR 5e-6 cosine', 'Validation every 100 steps, checkpoint every 150 steps (with optimizer state), auto-resume chain', 'Train LM loss 1.12 → 0.375 · validation 0.394 → 0.371 · W&B project nemotron35-cricket-reasoning'], m: ['job 6206759', '2 × 8 H100', 'TP2·EP8'] },
+  { i: '📤', t: 'Export', w: '3 min', h: 'Megatron → Hugging Face',
+    b: ['6,513 tensors including all 270 MTP tensors; names identical to the base model', 'Export wrote <code>max_position_embeddings=4096</code> and <code>num_nextn_predict_layers=2</code>', 'Shipped the base model\'s config.json and tokenizer files instead (256K context)'], m: ['job 6207896', '62 GB safetensors'] },
+  { i: '🎯', t: 'Evaluate', w: '6–10 min each', h: '600-question benchmark with vLLM',
+    b: ['Base and fine-tuned run in parallel, TP8 vLLM, 4 samples per question', `Accuracy ${pct(B.accuracy)} → <b>${pct(F.accuracy)}</b>; tokens ${fmt(B.mean_tokens, 0)} → ${fmt(F.mean_tokens, 0)}`, 'Manual review of samples before release'], m: ['jobs 6207897 · 6207942'] },
+  { i: '🤗', t: 'Publish', w: '2.5 min', h: 'Public Hugging Face release',
+    b: ['<code>upload_large_folder</code>, 14 shards, model card with settings and results', 'All 23 files verified on the Hub by size', 'Balab2021/Nemotron-3.5-Lightning-30B-A3B-Cricket-Reasoning (rev b2bd283)'], m: ['job 6208033', 'public'] },
+];
+let stageIdx = 0, stageTimer = null;
+$('#pipe').innerHTML = STAGES.map((s, k) => `<button class="stage" data-k="${k}" aria-label="${s.t}"><div class="n">${String(k + 1).padStart(2, '0')} <span class="icon">${s.i}</span></div><div class="t">${s.t}</div><div class="w">${s.w}</div><div class="bar"><b></b></div></button>`).join('');
+function showStage(k) {
+  stageIdx = (k + STAGES.length) % STAGES.length;
+  document.querySelectorAll('.stage').forEach((el, j) => { el.classList.toggle('on', j === stageIdx); el.classList.toggle('done', j < stageIdx); });
+  const on = document.querySelector('.stage.on'); on.classList.remove('on'); void on.offsetWidth; on.classList.add('on');
+  const s = STAGES[stageIdx];
+  $('#pipeDetail').innerHTML = `<div class="h">${s.i} ${s.h}</div><ul>${s.b.map(x => `<li>${x}</li>`).join('')}</ul><div class="meta">${s.m.map(x => `<span class="pill">${x}</span>`).join('')}</div>`;
+}
+function playPipe() {
+  if (stageTimer) { clearInterval(stageTimer); stageTimer = null; $('#pipePlay').textContent = '▶ Play'; return; }
+  $('#pipePlay').textContent = '❚❚ Pause';
+  if (stageIdx === STAGES.length - 1) showStage(0);
+  stageTimer = setInterval(() => { if (stageIdx === STAGES.length - 1) { playPipe(); return; } showStage(stageIdx + 1); }, 2600);
+}
+$('#pipe').onclick = e => { const b = e.target.closest('.stage'); if (b) { if (stageTimer) playPipe(); showStage(+b.dataset.k); } };
+$('#pipePlay').onclick = playPipe;
+$('#pipePrev').onclick = () => showStage(stageIdx - 1);
+$('#pipeNext').onclick = () => showStage(stageIdx + 1);
+showStage(0);
+
+/* ---------- architecture ---------- */
+const LAYERS = 'mamba moe mamba moe mamba attention moe mamba moe mamba moe mamba attention moe mamba moe mamba moe mamba attention moe mamba moe mamba moe mamba attention moe mamba moe mamba moe mamba attention moe mamba moe mamba moe mamba moe mamba attention moe mamba moe mamba moe mamba moe mamba moe'.split(' ');
+const INFO = {
+  mamba: { name: 'Mamba-2 mixer', c: 'var(--s1)', d: 'Selective state-space layer: 64 heads × 64 dim, state size 128, 8 groups, conv kernel 4, chunk 128. Linear in sequence length with no KV cache, which is why the model reaches 1M context.' },
+  moe: { name: 'MoE feed-forward', c: 'var(--s2)', d: '128 routed experts (FFN dim 1,856, ReLU²) plus 1 shared expert (3,712). A sigmoid router with expert bias picks the top 6 per token, scaled by 2.5. In training the experts are sharded EP8, 16 per GPU.' },
+  attention: { name: 'Grouped-query attention', c: 'var(--s3)', d: '32 query heads and 2 KV heads, head dim 128, full RoPE. Only 6 of the 52 layers are attention; they provide exact long-range retrieval and are split across the TP2 pair.' },
+};
+const counts = LAYERS.reduce((a, t) => (a[t] = (a[t] || 0) + 1, a), {});
+$('#archLegend').innerHTML = Object.entries(INFO).map(([k, v]) => `<span><i style="background:${v.c}"></i>${v.name} × ${counts[k]}</span>`).join('') + `<span><i style="background:repeating-linear-gradient(45deg,var(--s2),var(--s2) 3px,var(--surface-2) 3px,var(--surface-2) 6px)"></i>MTP block (attention + MoE)</span>`;
+$('#layers').innerHTML = LAYERS.map((t, k) => `<div class="layer ${t}" role="listitem" tabindex="0" data-k="${k}" title="Layer ${k}: ${INFO[t].name}"></div>`).join('');
+$('#mtpLayers').innerHTML = `<div class="layer mtp attention" data-k="mtp-a" tabindex="0" title="MTP: attention"></div><div class="layer mtp" data-k="mtp-e" tabindex="0" title="MTP: MoE"></div>`;
+function layerInfo(k) {
+  document.querySelectorAll('.layer').forEach(el => el.classList.toggle('sel', el.dataset.k === String(k)));
+  if (String(k).startsWith('mtp')) {
+    $('#layerInfo').innerHTML = `<h3>Multi-token prediction block</h3><p class="small muted">An extra attention + MoE block reuses the trunk's hidden state to predict tokens t+2 and t+3. It is applied twice, sharing weights. During SFT its losses (MTP-1, MTP-2, scaled by 0.3) train it alongside the main head, and at inference it serves as a built-in speculative-decoding drafter.</p><div class="pill">270 tensors · exported and verified</div>`;
+    return;
+  }
+  const t = LAYERS[k], v = INFO[t];
+  $('#layerInfo').innerHTML = `<h3><span style="color:${v.c}">■</span> Layer ${k} · ${v.name}</h3><p class="small muted">${v.d}</p><div class="pill">pre-norm residual · d_model 2,688</div>`;
+}
+$('#mtpLayers').onclick = $('#layers').onclick = e => { const l = e.target.closest('.layer'); if (l) layerInfo(l.dataset.k); };
+$('#mtpLayers').onkeydown = $('#layers').onkeydown = e => { if (e.key === 'Enter') { const l = e.target.closest('.layer'); if (l) layerInfo(l.dataset.k); } };
+layerInfo(5);
+const TOKS = ['After', ' 6', '.', '4', ' overs', ' they', ' are', ' 32', '/', '4', ' →', ' run', ' rate'];
+$('#tokRow').innerHTML = TOKS.map(t => `<span class="tok">${t.replace(/ /g, '·')}</span>`).join('');
+$('#moeViz').innerHTML = Array.from({ length: 128 }, (_, k) => `<div class="ex" title="expert ${k}"></div>`).join('') + '';
+const shared = document.createElement('div'); shared.className = 'ex shared'; shared.title = 'shared expert'; $('#moeViz').prepend(shared);
+let tokI = 0;
+function routeTick() {
+  const toks = document.querySelectorAll('.tok'), exs = document.querySelectorAll('.moe-viz .ex:not(.shared)');
+  toks.forEach((t, j) => t.classList.toggle('on', j === tokI));
+  exs.forEach(e => e.classList.remove('hot'));
+  let a = (tokI + 1) * 0x9E3779B9 | 0; const pick = new Set();   // mulberry32: well-spread pseudo-random experts
+  const rand = () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  while (pick.size < 6) pick.add(Math.floor(rand() * 128));
+  pick.forEach(p => exs[p].classList.add('hot'));
+  tokI = (tokI + 1) % TOKS.length;
+}
+routeTick(); if (!reduced) setInterval(routeTick, 1100);
+
+/* ---------- parallelism ---------- */
+const PHASES = [
+  { t: 'Load batch', d: 'Each DP rank reads its packed sequences (mbs 1, 4,096 tokens).', cls: () => 'dp', sel: g => true },
+  { t: 'Dense / Mamba (TP2)', d: 'Attention, Mamba and shared-expert weights are split across GPU pairs; sequence parallel splits activations.', cls: r => Math.floor(r / 2) % 2 ? 'tp alt' : 'tp', sel: g => true, pairs: true },
+  { t: 'MoE dispatch (EP8)', d: 'Tokens go all-to-all (DeepEP) to whichever of the 8 GPUs holds their 6 experts (16 experts per GPU).', cls: () => 'ep', sel: g => true, ep: true },
+  { t: 'Backward + recompute', d: 'Selective recompute redoes MoE, norm, attention and MLP activations instead of storing them, which keeps the peak at 65 GB.', cls: r => Math.floor(r / 2) % 2 ? 'tp alt' : 'tp', sel: g => true, pulse: true },
+  { t: 'Grad reduce (DP)', d: 'Dense grads reduce-scatter across 8 DP replicas; expert grads across the 2 nodes (expert-DP 2). Then distributed-Adam update.', cls: () => 'dp', sel: g => true, cross: true },
+];
+$('#nodes').innerHTML = [0, 1].map(n => `<div class="node" id="node${n}"><div class="lbl"><span>Node ${n + 1} · eos00${n ? 18 : '297'.slice(0)}</span><span>8 × H100 80 GB · NVLink</span></div><div class="gpus">${Array.from({ length: 8 }, (_, g) => {
+  const r = n * 8 + g; return `<div class="gpu" data-r="${r}"><div class="id">GPU ${r}</div><div class="sub">TP ${Math.floor(r / 2)}·${r % 2} · EP ${g}</div><div class="sub">experts ${g * 16}–${g * 16 + 15}</div><div class="mem" title="peak 64.7 / 80 GB"><b></b></div></div>`; }).join('')}</div></div>`).join('');
+$('#node0 .lbl span').textContent = 'Node 1 · eos0018';
+$('#node1 .lbl span').textContent = 'Node 2 · eos0297';
+$('#phases').innerHTML = PHASES.map((p, k) => `<button class="phase" data-k="${k}"><b>${k + 1}. ${p.t}</b>${p.d}</button>`).join('');
+let phI = 0, phTimer = null;
+function showPhase(k) {
+  phI = k; const p = PHASES[k];
+  document.querySelectorAll('.phase').forEach((el, j) => el.classList.toggle('on', j === k));
+  document.querySelectorAll('.gpu').forEach(el => { el.className = 'gpu ' + p.cls(+el.dataset.r) + (p.pulse ? ' pulse' : ''); });
+  document.querySelectorAll('.node').forEach(el => el.classList.toggle('hl', !!p.cross));
+}
+$('#phases').onclick = e => { const b = e.target.closest('.phase'); if (b) { stopPh(); showPhase(+b.dataset.k); } };
+function stopPh() { if (phTimer) { clearInterval(phTimer); phTimer = null; $('#phasePlay').textContent = '▶ Animate step'; } }
+$('#phasePlay').onclick = () => { if (phTimer) return stopPh(); $('#phasePlay').textContent = '❚❚ Pause'; showPhase(0); phTimer = setInterval(() => showPhase((phI + 1) % PHASES.length), 1800); };
+showPhase(1);
+
+/* ---------- packing ---------- */
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function repack() {
+  const segs = []; let used = 0, n = 0;
+  while (true) {
+    const p = Math.round(rnd(150, 200)), th = Math.round(Math.min(1300, Math.max(150, rnd(-0.4, 1) ** 2 * 900 + rnd(160, 520)))), an = Math.round(rnd(80, 160));
+    if (used + p + th + an > 4096) break;
+    segs.push(['prompt', p], ['think', th], ['ans', an]); used += p + th + an; n++;
+  }
+  segs.push(['pad', 4096 - used]);
+  $('#pack').innerHTML = segs.map(([c, w]) => `<div class="seg ${c}" style="flex:0 0 ${100 * w / 4096}%" title="${c === 'think' ? 'reasoning' : c === 'ans' ? 'answer' : c} · ${w} tokens"></div>`).join('');
+  const loss = segs.filter(s => s[0] === 'think' || s[0] === 'ans').reduce((a, s) => a + s[1], 0);
+  $('#packStat').textContent = `${n} examples · ${fmt(100 * used / 4096, 1)}% filled · ${fmt(100 * loss / 4096, 0)}% of tokens carry loss (illustrative)`;
+}
+$('#repack').onclick = repack; repack();
+const P = M.prep;
+$('#prepTable').innerHTML = `<tbody>
+<tr><td>Training rows</td><td class="num">${P.training_rows.toLocaleString()}</td></tr>
+<tr><td>Dropped (reasoning &gt; 3,300 tokens)</td><td class="num">${P.training_rows_dropped_too_long}</td></tr>
+<tr><td>Validation rows</td><td class="num">${P.validation_rows.toLocaleString()}</td></tr>
+<tr><td>Mean / p99 reasoning tokens</td><td class="num">${fmt(P.reasoning_tokens_mean, 0)} / ${P.reasoning_tokens_p99.toLocaleString()}</td></tr>
+<tr><td>Packed sequences (4,096)</td><td class="num">73,263</td></tr>
+<tr><td>Packing factor · efficiency</td><td class="num">6.25 · 97.7%</td></tr></tbody>`;
+const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const SYS = "You are a cricket analyst. Work through the problem step by step, then give the final answer on its own line as 'Final answer: <number>'.";
+const QS = {
+  run_rate: 'What is the current run rate in runs per over? Round to 2 decimal places.',
+  chase_rate: 'At what run rate (runs per over) did they score over the rest of their innings from this point? Round to 2 decimal places.',
+  milestone: 'At their current strike rate, how many more balls will the striker need to reach their next fifty?',
+};
+function showEx(q) {
+  const s = M.examples[q]; if (!s) return;
+  document.querySelectorAll('#exTabs .btn').forEach(b => b.setAttribute('aria-pressed', b.dataset.q === q));
+  const [think, ans] = s.text.split('</think>');
+  const ansHtml = esc(ans.trim()).replace(/(Final answer:[^\n]*)/i, '<span class="final">$1</span>');
+  $('#exChat').innerHTML = `<span class="m">&lt;|im_start|&gt;system\n${esc(SYS)}&lt;|im_end|&gt;\n&lt;|im_start|&gt;user\n[${q} question, ${s.id.split('-')[0]} · gold ${s.gold}]&lt;|im_end|&gt;\n&lt;|im_start|&gt;assistant\n</span><span class="loss"><span class="m">&lt;think&gt;</span>\n<span class="think">${esc(think.trim())}</span><span class="m">&lt;/think&gt;</span>${ansHtml}<span class="m">&lt;|im_end|&gt;</span></span>`;
+}
+$('#exTabs').innerHTML = Object.keys(M.examples).map(q => `<button class="btn" data-q="${q}">${q}</button>`).join('');
+$('#exTabs').onclick = e => { const b = e.target.closest('.btn'); if (b) showEx(b.dataset.q); };
+showEx(M.examples.chase_rate ? 'chase_rate' : Object.keys(M.examples)[0]);
+
+/* ---------- bench rows ---------- */
+const BENCH = [
+  { n: 'A · TP2 · SP · EP8 · selective', mem: 64.7, ok: true, note: '9.35 s/step' },
+  { n: 'B · TP1 · EP8 · no recompute', mem: 79.1, ok: false, note: 'OOM step 2' },
+  { n: 'C · TP1 · EP8 · selective', mem: 79.1, ok: false, note: 'OOM step 2' },
+];
+$('#benchRows').innerHTML = BENCH.map(b => `<div class="bench-row"><div class="name">${b.n}</div><div class="mem-track"><div class="mem-limit"></div><div class="mem-fill ${b.ok ? '' : 'oom'}" data-w="${100 * b.mem / 90}" title="${b.ok ? 'peak ' + b.mem + ' GB' : 'out of memory at 79 GB'}"></div></div><div class="status ${b.ok ? 'ok' : 'bad'}">${b.ok ? '✔' : '✖'} ${b.note}</div></div>`).join('') +
+  '<div class="small muted" style="margin-top:8px">Bar = peak allocated GPU memory (scale 0–90 GB). TP1 keeps whole copies of the dense and Mamba weights and their optimizer state on every GPU.</div>';
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { document.querySelectorAll('.mem-fill').forEach(f => f.style.width = f.dataset.w + '%'); io.disconnect(); } }), { threshold: .3 });
+io.observe($('#benchRows'));
+
+/* ---------- charts ---------- */
+const T = M.train, START = new Date(T[0].t.replace(' ', 'T')).getTime() - 5 * 29460;
+let xMode = 'step', charts = {};
+const xOf = r => xMode === 'step' ? r.step : xMode === 'epoch' ? r.step / 573 : (new Date(r.t.replace(' ', 'T')).getTime() - START) / 60000;
+const xTitle = () => ({ step: 'step', epoch: 'epoch', time: 'minutes since start' }[xMode]);
+const valX = v => { if (xMode === 'step') return v.step; if (xMode === 'epoch') return v.step / 573; const r = T.reduce((a, b) => Math.abs(b.step - v.step) < Math.abs(a.step - v.step) ? b : a); return xOf(r); };
+function baseOpts(yTitle, extra = {}) {
+  const grid = css('--grid'), tx = css('--text-2');
+  return Object.assign({
+    responsive: true, maintainAspectRatio: false, animation: reduced ? false : { duration: 900 },
+    interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { display: false }, tooltip: { backgroundColor: css('--surface'), titleColor: css('--text'), bodyColor: css('--text-2'), borderColor: css('--border'), borderWidth: 1, padding: 10, boxPadding: 4, usePointStyle: true } },
+    scales: {
+      x: { type: 'linear', title: { display: true, text: xTitle(), color: tx }, grid: { color: grid, drawTicks: false }, border: { display: false }, ticks: { color: tx, maxTicksLimit: 8, callback: v => xMode === 'epoch' ? fmt(v, 2) : Math.round(v) } },
+      y: { title: { display: !!yTitle, text: yTitle, color: tx }, grid: { color: grid, drawTicks: false }, border: { display: false }, ticks: { color: tx, maxTicksLimit: 6 } },
+    },
+  }, extra);
+}
+const line = (label, color, data, extra = {}) => Object.assign({ label, data, borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, tension: .25 }, extra);
+function mk(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart($('#' + id), cfg); }
+function renderCharts() {
+  if (!window.Chart) return;
+  const s1 = css('--s1'), s2 = css('--s2'), s3 = css('--s3'), tx = css('--text');
+  const pts = k => T.filter(r => r[k] != null).map(r => ({ x: xOf(r), y: r[k] }));
+  const vpts = M.val.map(v => ({ x: valX(v), y: v.loss }));
+  mk('lossChart', { type: 'line', data: { datasets: [line('LM loss', s1, pts('lm')), line('MTP-1', s2, pts('mtp1')), line('MTP-2', s3, pts('mtp2')),
+    line('validation', tx, vpts, { showLine: false, pointRadius: 5, pointHoverRadius: 7, pointBackgroundColor: tx, pointBorderColor: css('--surface'), pointBorderWidth: 2 })] },
+    options: baseOpts('loss', {}) });
+  Object.assign(charts.lossChart.options.scales.y, { min: 0.3, max: 1.2 });   // MTP losses start near 2.0 at step 5; clipped
+  charts.lossChart.options.plugins.tooltip.callbacks = { label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(4)}` }; charts.lossChart.update('none');
+  mk('valChart', { type: 'line', data: { datasets: [line('validation LM loss', s1, vpts, { pointRadius: 5, tension: 0, pointBorderColor: css('--surface'), pointBorderWidth: 2 })] }, options: baseOpts('loss') });
+  charts.valChart.options.plugins.tooltip.callbacks = { label: c => ` validation loss ${c.parsed.y.toFixed(4)}` }; charts.valChart.update('none');
+  mk('lrChart', { type: 'line', data: { datasets: [line('learning rate', s1, pts('lr'), { fill: true, backgroundColor: css('--s1-soft') })] }, options: baseOpts('LR') });
+  charts.lrChart.options.scales.y.ticks.callback = v => v.toExponential(0); charts.lrChart.update('none');
+  mk('tputChart', { type: 'line', data: { datasets: [line('TFLOP/s/GPU', s1, pts('tflops'))] }, options: baseOpts('TFLOP/s') });
+  mk('gnChart', { type: 'line', data: { datasets: [line('grad norm', s1, pts('gn'))] }, options: baseOpts('norm') });
+  charts.gnChart.options.scales.y.type = 'logarithmic'; charts.gnChart.update('none');
+  mk('lbChart', { type: 'line', data: { datasets: [line('seq load-balancing loss', s1, pts('lb'))] }, options: baseOpts('loss') });
+  const bA = Object.values(M.bench)[0].steps;
+  mk('benchChart', { type: 'bar', data: { labels: bA.map(r => r.step), datasets: [{ label: 'ms / step', data: bA.map(r => r.ms), backgroundColor: bA.map(r => r.ms > 20000 ? css('--muted') : s1), borderRadius: 4, borderSkipped: 'bottom', maxBarThickness: 18 }] },
+    options: Object.assign(baseOpts('ms (log)'), { scales: { x: { grid: { display: false }, ticks: { color: css('--text-2'), maxTicksLimit: 13 }, title: { display: true, text: 'step', color: css('--text-2') } }, y: { type: 'logarithmic', grid: { color: css('--grid') }, border: { display: false }, ticks: { color: css('--text-2'), callback: v => [5000, 10000, 20000, 50000, 100000].includes(v) ? fmt(v / 1000, 0) + 's' : '' } } } }) });
+  const types = Object.keys(F.accuracy_by_type);
+  const barDs = (lab, col, arr) => ({ label: lab, data: arr, backgroundColor: col, borderRadius: 4, borderSkipped: 'bottom', maxBarThickness: 46, categoryPercentage: .62, barPercentage: .9 });
+  const catOpts = (yt, cb) => Object.assign(baseOpts(yt, {}), { interaction: { mode: 'index', intersect: false }, scales: { x: { grid: { display: false }, ticks: { color: css('--text-2') } }, y: { grid: { color: css('--grid') }, border: { display: false }, ticks: { color: css('--text-2'), callback: cb } } } });
+  mk('accChart', { type: 'bar', data: { labels: types, datasets: [barDs('base', s2, types.map(t => 100 * B.accuracy_by_type[t])), barDs('fine-tuned', s1, types.map(t => 100 * F.accuracy_by_type[t]))] },
+    options: catOpts('accuracy %', v => v + '%') });
+  charts.accChart.options.scales.y.min = 60; charts.accChart.options.scales.y.max = 100;
+  charts.accChart.options.plugins.tooltip.callbacks = { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y, 1)}%` }; charts.accChart.update('none');
+  mk('tokChart', { type: 'bar', data: { labels: types, datasets: [barDs('base', s2, types.map(t => B.tokens_by_type[t])), barDs('fine-tuned', s1, types.map(t => F.tokens_by_type[t]))] },
+    options: catOpts('tokens', v => v.toLocaleString()) });
+  charts.tokChart.options.plugins.tooltip.callbacks = { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y, 0)} tokens` }; charts.tokChart.update('none');
+  const edges = [0, 200, 300, 400, 500, 600, 800, 1000, 1500, 2000, 3000, 4000, 5000, 6144, 6145];
+  const lab = edges.slice(0, -1).map((e, k) => k === edges.length - 2 ? '6,144 (cap)' : `${e}–${edges[k + 1]}`);
+  const bin = h => { const c = new Array(edges.length - 1).fill(0); h.forEach(v => { let k = edges.findIndex((e, j) => v >= e && v < edges[j + 1]); if (k < 0) k = edges.length - 2; c[k]++; }); return c.map(x => 100 * x / h.length); };
+  mk('histChart', { type: 'bar', data: { labels: lab, datasets: [barDs('base', s2, bin(B.tokens_hist)), barDs('fine-tuned', s1, bin(F.tokens_hist))] }, options: catOpts('% of samples', v => v + '%') });
+  charts.histChart.options.scales.x.ticks.maxRotation = 50; charts.histChart.options.scales.x.title = { display: true, text: 'generated tokens', color: css('--text-2') };
+  charts.histChart.options.plugins.tooltip.callbacks = { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y, 1)}% of samples` }; charts.histChart.update('none');
+}
+document.querySelectorAll('#trainCtrl [data-x]').forEach(b => b.onclick = () => {
+  xMode = b.dataset.x; document.querySelectorAll('#trainCtrl [data-x]').forEach(o => o.setAttribute('aria-pressed', o === b)); renderCharts();
+});
+$('#replayTrain').onclick = renderCharts;
+$('#trainTable').innerHTML = '<thead><tr><th class="num">step</th><th class="num">epoch</th><th class="num">LM loss</th><th class="num">MTP-1</th><th class="num">MTP-2</th><th class="num">LR</th><th class="num">TFLOP/s</th><th class="num">grad norm</th><th>time</th></tr></thead><tbody>' +
+  T.map(r => `<tr><td class="num">${r.step}</td><td class="num">${fmt(r.step / 573, 3)}</td><td class="num">${r.lm?.toFixed(4)}</td><td class="num">${r.mtp1?.toFixed(4)}</td><td class="num">${r.mtp2?.toFixed(4)}</td><td class="num">${r.lr?.toExponential(2)}</td><td class="num">${r.tflops}</td><td class="num">${r.gn}</td><td>${r.t.slice(11)}</td></tr>`).join('') + '</tbody>';
+$('#evalTiles').innerHTML = [
+  tile('Overall accuracy', pct(F.accuracy), `base ${pct(B.accuracy)}`),
+  tile('Truncated (no answer)', pct(F.truncated_rate), `base ${pct(B.truncated_rate)}`),
+  tile('Mean tokens', fmt(F.mean_tokens, 0), `base ${fmt(B.mean_tokens, 0)}`),
+  tile('Samples scored', (F.questions * F.k).toLocaleString(), `${F.questions} questions × ${F.k}`),
+].join('');
+const typesT = Object.keys(F.accuracy_by_type);
+$('#evalTable').innerHTML = `<thead><tr><th>Metric</th><th class="num">Base</th><th class="num">Fine-tuned</th><th class="num">Δ</th></tr></thead><tbody>
+<tr><td><b>Accuracy (all)</b></td><td class="num">${pct(B.accuracy)}</td><td class="num"><b>${pct(F.accuracy)}</b></td><td class="num">+${fmt(100 * (F.accuracy - B.accuracy), 1)} pts</td></tr>
+${typesT.map(t => `<tr><td>&nbsp;&nbsp;${t}</td><td class="num">${pct(B.accuracy_by_type[t])}</td><td class="num">${pct(F.accuracy_by_type[t])}</td><td class="num">+${fmt(100 * (F.accuracy_by_type[t] - B.accuracy_by_type[t]), 1)} pts</td></tr>`).join('')}
+<tr><td>Mean generated tokens</td><td class="num">${fmt(B.mean_tokens, 0)}</td><td class="num">${fmt(F.mean_tokens, 0)}</td><td class="num">−${fmt(100 * (1 - F.mean_tokens / B.mean_tokens), 0)}%</td></tr>
+${typesT.map(t => `<tr><td>&nbsp;&nbsp;tokens · ${t}</td><td class="num">${fmt(B.tokens_by_type[t], 0)}</td><td class="num">${fmt(F.tokens_by_type[t], 0)}</td><td class="num">−${fmt(100 * (1 - F.tokens_by_type[t] / B.tokens_by_type[t]), 0)}%</td></tr>`).join('')}
+<tr><td>Truncated at 6,144 tokens</td><td class="num">${pct(B.truncated_rate)}</td><td class="num">${pct(F.truncated_rate)}</td><td class="num">−${fmt(100 * (B.truncated_rate - F.truncated_rate), 1)} pts</td></tr>
+<tr><td>No parsable answer</td><td class="num">${pct(B.no_answer_rate)}</td><td class="num">${pct(F.no_answer_rate)}</td><td class="num">−${fmt(100 * (B.no_answer_rate - F.no_answer_rate), 1)} pts</td></tr></tbody>`;
+let chartsDrawn = false;
+const io2 = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting && !chartsDrawn) { chartsDrawn = true; renderCharts(); } }), { rootMargin: '200px' });
+io2.observe($('#config'));
+if (!window.Chart) document.querySelectorAll('.chart-box').forEach(b => b.innerHTML = '<div class="small muted" style="padding:20px">Charts need Chart.js from cdnjs (offline?). The tables below hold the same data.</div>');
+
+/* ---------- timeline ---------- */
+const EV = [
+  ['07:21', 'ok', 'Setup job: NeMo 26.08.01 image (39 GB), model and dataset cached on Lustre'],
+  ['07:31', 'ok', 'Data prep on the login node: 458,247 chat rows + 4,000 validation rows'],
+  ['07:38', 'fix', 'Import failed: <code>convert.sh</code>\'s uv env pulled huggingface-hub 2.1.1 → call the worker with <code>/opt/venv/bin/python</code>'],
+  ['07:47', 'ok', 'HF → Megatron import done in 3.5 min (62 GB)'],
+  ['07:50', 'fix', 'Bench crashed: <code>~/.bashrc</code> reset <code>CODE_DIR</code> inside the container → pinned it in the job script'],
+  ['07:55', 'fix', 'Packing ENOMEM: 458K shared-memory tensors exceeded the mmap limit → single-process tokenization'],
+  ['08:20', 'fix', '<code>batch</code> estimated an 8 h wait and <code>backfill</code> 4 h → moved to <code>interactive</code> (2-node cap)'],
+  ['09:29', 'ok', 'Packing finished (65 min, one-time): 73,263 sequences'],
+  ['09:35', 'ok', 'Bench A: 9.35 s/step, 93 TFLOP/s/GPU, 65 GB peak'],
+  ['09:39', 'fix', 'Bench B: inductor "CUDA driver error: file not found" from a shared Lustre compile cache → node-local <code>/tmp</code> caches'],
+  ['09:45', 'fix', 'Bench B and C: out of memory with TP1 → TP2 selected'],
+  ['09:51', 'ok', 'Full SFT started: 573 steps, 2 nodes, W&B run 8qh82u2z'],
+  ['11:25', 'ok', 'Training done in 1 h 37 min · validation loss 0.371'],
+  ['11:31', 'fix', 'Export done; config had a 4K context and 2 MTP layers → shipped the base config.json'],
+  ['11:40', 'ok', 'Benchmarks: base 89.6% vs fine-tuned 97.0%'],
+  ['11:44', 'ok', 'Published to Hugging Face (public), all 23 files verified'],
+];
+$('#timeline').innerHTML = EV.map(([t, c, d]) => `<div class="ev ${c}"><div class="tm">${t} · ${c === 'ok' ? 'done' : 'issue → fix'}</div><div>${d}</div></div>`).join('');
+
+/* ---------- toc highlight ---------- */
+const secs = [...document.querySelectorAll('main section')];
+const io3 = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) document.querySelectorAll('#toc a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + e.target.id)); }), { rootMargin: '-40% 0px -55% 0px' });
+secs.forEach(s => io3.observe(s));
+</script>
+</body>
+</html>
