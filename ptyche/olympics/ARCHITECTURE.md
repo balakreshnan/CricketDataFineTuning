@@ -131,7 +131,7 @@ flowchart LR
 * **No etcd or NATS:** discovery uses a node-local file store and requests go over TCP, so every node is a
   self-contained deployment, and N nodes are just N independent shards.
 * **Resumable:** the client appends one JSON line per sample and skips `(id, sample)` pairs already present.
-* **Throughput:** 20–33k output tokens/s per node; startup takes about 3.5 min.
+* **Throughput:** about 31.7k output tokens/s per node on long runs (12 nodes: 380k tok/s, about 156 requests/s); startup takes about 3.5 min. Per-node tables are in README §3.4.
 
 ### 3.3 Coverage loop (rejection sampling to ≥ 1:1)
 

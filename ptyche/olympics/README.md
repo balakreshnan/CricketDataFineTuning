@@ -129,7 +129,7 @@ Each node runs its own Dynamo deployment:
 * `gen_client.py` shuffles and shards the questions across nodes, keeps 512–1,024 requests in flight per node,
   samples K times per question (T=1.0, top_p=0.95, `chat_template_kwargs.enable_thinking=true`), grades each sample
   against the gold answer, and appends JSONL. Runs are resumable on `(id, sample)`.
-* Throughput was **20–33k output tokens/s per 4-GPU node**.
+* Throughput was **about 31.7k output tokens/s per 4-GPU node** on the 12-node first pass (380k tok/s in total) and up to 34k on long-trace retries; see §3.4.
 
 ### 3.3 Rejection sampling until (almost) every row is covered (`build_dataset.py`, `data.sbatch`)
 For every source row, the **shortest trace that is verified correct, finished (not truncated) and at most 28k
@@ -146,11 +146,66 @@ tokens** across all of its questions is kept. Rows without one get more samples,
 ¹ Counted with the old ambiguous NOC wording; 31k of those rows were then regenerated.
 ² Includes raising the dataset trace cap from 12k to 28k tokens; many hard rows only have long correct traces.
 
-In total about 1.41M row samples (≈ 4.7B generated tokens: 2.63B in the first pass, the rest in the long-trace
-retries) went into the 269,723 kept traces. Across all row
+In total **1,410,620 Dynamo requests** (5.04B output + 1.57B prompt tokens; 2.63B output tokens in the first pass,
+the rest in the long-trace retries) went into the 269,723 kept traces. Counting smoke tests, the table set and the
+fine-tuned evaluation, the project made **1,604,344 requests (≈ 5.40B output tokens) with zero failed requests**. Across all row
 samples, pass@1 was 86.3 % and 5.8 % were truncated. Per-type pass@1 ranged from 99.9 % (`at_medals_at`) down to
 51 % (`ev_older`). The upload step refuses to run below 1:1 unless `--allow-missing N` is passed; it was run with
 `--allow-missing 8` after the owner approved.
+
+### 3.4 Dynamo throughput per node
+Each node is an independent Dynamo deployment (1 frontend + 4 SGLang TP1 workers) serving a shuffled `index % N`
+shard, so nodes never talk to each other and throughput scales linearly with node count. The numbers below are
+**output (generated) tokens/s** as measured by each node's client over its whole run (`DONE shard` lines in
+`gen/<tag>/logs/node*.client-*.log`). Prompt tokens, which are largely served from the prefix cache, are not
+included.
+
+**First pass, `rows_train` split: 12 nodes (48 GB200), 1,024 in-flight requests per node**
+
+| Node | Requests | Output tokens | Time | tok/s |
+|---|---|---|---|---|
+| node0 | 80,912 | 201.3M | 105.3 min | 31,864 |
+| node1 | 80,912 | 198.0M | 104.6 min | 31,536 |
+| node2 | 80,912 | 201.0M | 106.5 min | 31,459 |
+| node3 | 80,912 | 195.9M | 103.2 min | 31,632 |
+| node4 | 80,912 | 195.8M | 103.4 min | 31,544 |
+| node5 | 80,912 | 200.4M | 106.6 min | 31,334 |
+| node6 | 80,912 | 196.1M | 103.7 min | 31,519 |
+| node7 | 80,912 | 196.3M | 101.9 min | 32,118 |
+| node8 | 80,912 | 192.9M | 100.7 min | 31,915 |
+| node9 | 80,912 | 197.5M | 103.4 min | 31,855 |
+| node10 | 80,908 | 194.1M | 101.7 min | 31,817 |
+| node11 | 80,908 | 198.1M | 104.4 min | 31,615 |
+| **Total / mean** | **970,936** | **2,367.3M** | **100.7–106.6 min** | **mean 31,684 per node (±1.3 %); sum 380,208** |
+
+Per node that is about 7.9k output tokens/s per GPU and about 13 requests/s. Across the 12 nodes it is about
+156 requests/s. The slowest node finished within 6 minutes of the fastest. The `rows_test` split of the same job
+(9,000 requests per node, 12.4 min) ran at a mean of 29,901 tok/s per node.
+
+**All generation runs (mean per node; "aggregate" = sum of the per-node rates)**
+
+| Run | Nodes | In-flight/node | Requests | Mean output tokens/request | Mean tok/s per node | Aggregate tok/s |
+|---|---|---|---|---|---|---|
+| Rows 1st pass, train split | 12 | 1,024 | 970,936 | 2,438 | **31,684** | 380k |
+| Rows 1st pass, test split | 12 | 1,024 | 107,988 | 2,455 | 29,901 | 359k |
+| Retry (K=6) | 8 | 1,024 | 244,512 | 5,287 | **33,574** | 269k |
+| Fallback (K=8) | 4 | 1,024 | 47,504 | 8,631 | **34,049** | 136k |
+| Retry2 (K=16, 28k budget) | 4 | 1,024 | 36,672 | 18,604 | 32,735 | 131k |
+| Fallback2 (K=16, 28k) | 4 | 1,024 | 3,008 | 8,287 | 22,080 | 88k |
+| Table set, train split (K=8) | 4 | 512 | 74,016 | 1,578 | 27,074 | 108k |
+| Table set, test split | 4 | 512 | 4,400 | 2,467 | 16,110 | 64k |
+| Fine-tuned eval, row test | 4 | 1,024 | 107,988 | 2,026 | 30,683 | 123k |
+| Fine-tuned eval, table test | 4 | 1,024 | 2,200 | 2,529 | 12,048 | 48k |
+
+What drives the rate:
+- **Long runs with long traces reach about 32–34k tok/s per node.** GPUs stay at full batch, and each request is
+  mostly decode.
+- **Short runs (a few thousand requests) show 12–22k tok/s.** They are dominated by the ramp-up and by the last
+  few long stragglers decoding at a small batch size.
+- **Doubling in-flight requests from 512 to 1,024 per node** (256 per GPU, which matches the 256-request decode
+  CUDA graph) raised the steady-state rate from about 27k to 31–34k tok/s.
+
+All 64 client runs finished with 0 failed requests.
 
 A separate **9,802-question table set** (`olympics_qa.py`: medals per career, distinct Games, country golds, sport
 medal-table winner, highest BMI, medallist mean age) was generated with K=8 (78,416 samples, 4 nodes, 26 min). It
@@ -200,7 +255,92 @@ which is built for GB200 NVL72; the recipe's DeepEP rejects the "NVIDIA GB200" d
 Loss: training loss went 0.106 (step 10) → 0.096 (step 400) → 0.095 (step 785). Validation loss went 0.1013 → 0.1045
 (step 200) → 0.0995 (step 600) → **0.0973** (final). All of these are logged to W&B.
 
-### 4.4 Export and upload
+### 4.4 Fine-tuning run statistics (job 2991539, `sft-rows-e1`)
+
+**Configuration**
+
+| | |
+|---|---|
+| GPUs | **16 × NVIDIA GB200** (4 nodes × 4, `ptyche[0312,0314-0315,0318]`), NVL72 NVLink domain |
+| Parallelism | TP1 · PP1 · CP1 · **EP8** (16 experts per GPU) · ETP1 · DP16 for dense/Mamba (expert-DP 2) · distributed optimizer |
+| MoE dispatcher | flex / **HybridEP** |
+| Recompute | selective (`moe, layernorm, core_attn, mlp`) |
+| Data | 227,051 training rows → **50,446 packed sequences** of 8,192 tokens (4.5 rows per sequence, **98.8 % fill**) |
+| Tokens | **408.2M real tokens** (413.3M slots), of which **242.5M (59.4 %) carry loss** (assistant reasoning + answer) |
+| Epochs / steps | **1 epoch = 789 steps** (global batch 64 sequences ≈ 517k real tokens per step) |
+| Optimizer / LR | Megatron Adam (recipe), LR 5e-6 with 30-step warmup → cosine to 5e-7 |
+| Validation / checkpoints | every 100 steps (10 val iters on 2,237 held-out rows); checkpoint every 100, keep 2 |
+
+**Where the 52.5 minutes went** (12:03:37 → 12:56:06)
+
+| Phase | Time |
+|---|---|
+| Container start, model build, load base checkpoint | ~2 min |
+| First 5 steps (CUDA graphs, compilation, warm-up: 26.6 s per step) | ~2.2 min |
+| **784 steady-state steps × 3.34 s** | **~43.6 min** |
+| 8 validations + 8 checkpoint saves (torch_dist, with optimizer state, to Lustre) | ~4.5 min |
+| **Total** | **52.5 min = 14.0 GPU-hours** |
+
+**Throughput (steps after the first 20)**
+
+| Metric | Value |
+|---|---|
+| Step time | mean **3,337 ms**, median 3,325, p95 3,464, min 3,156, max 3,790 |
+| Model FLOP/s per GPU (Megatron formula) | mean **267.5 TFLOP/s**, range 235.5–282.5; about 11 % of GB200's ~2.5 PFLOP/s dense-BF16 peak, which is typical for a 3B-active MoE |
+| Tokens/s | **≈ 155k real tokens/s across 16 GPUs ≈ 9.7k tokens/s per GPU**; ≈ 92k loss tokens/s |
+| Weak scaling (2 → 4 nodes, global batch doubled) | 3.07 s → 3.34 s per step, **≈ 92 % efficiency** |
+
+**Across GPUs.** Megatron logs averages across ranks. W&B recorded per-GPU system metrics (sampled every ~7.5 s) on
+the node that hosted the logger, `ptyche0318`. The four GPUs there behaved almost identically, which suggests the
+expert-parallel load was balanced:
+
+| Node ptyche0318, whole job | GPU0 | GPU1 | GPU2 | GPU3 |
+|---|---|---|---|---|
+| GPU utilisation (median) | 81 % | 81 % | 83 % | 84 % |
+| SM active (median) | 31.7 % | 31.3 % | 31.9 % | 31.5 % |
+| Tensor-pipe active (median) | 12.0 % | 11.9 % | 12.1 % | 12.0 % |
+| HBM used (median) | 108.8 GB | 108.9 GB | 108.9 GB | 108.9 GB |
+| Power (median / 1,200 W limit) | 601 W | 609 W | 596 W | 604 W |
+| NVLink TX ≈ RX (median, W&B rate units) | 36.3k | 37.1k | 37.0k | 36.2k |
+| SM clock | 2,062 MHz | 2,062 MHz | 2,062 MHz | 2,062 MHz |
+| Temperature (median) | 34 °C | 33 °C | 35 °C | 34 °C |
+
+* Megatron's own memory counter on rank 0 peaked at 96.9 GB allocated and 99.7 GB reserved; NVML sees about 109 GB
+  per GPU including the CUDA context and NCCL buffers. That leaves about 80 GB of headroom on each 189 GB GB200, so
+  room for 16k sequences or a larger micro-batch.
+* The MoE sequence-level load-balancing loss stayed near 1.0 (1.05 → 0.98), so tokens were spread evenly over
+  experts. That matches the flat per-GPU utilisation, power and NVLink traffic.
+* GPUs are busy (81–84 %) but only about 12 % tensor-pipe active, and power is half the limit. The run is bound by
+  small expert GEMMs, Mamba scans, recompute and all-to-all, not by tensor-core math, which is normal for a model
+  with ~3B active parameters. Larger micro-batches or fewer recompute modules are the main levers.
+
+**Training curves (W&B `s6mmt4cz`)**
+
+| Step | LR | lm loss | Grad norm | MTP-1 loss | Load-balance loss | Val loss |
+|---|---|---|---|---|---|---|
+| 10 | 1.7e-6 (warm-up) | 0.106 | 3.33 | 1.01 | 1.053 | |
+| 100 | 4.9e-6 | 0.101 | 0.40 | 0.47 | 1.029 | 0.1013 |
+| 200 | 4.5e-6 | 0.100 | 0.39 | 0.42 | 1.006 | 0.1045 |
+| 400 | 2.8e-6 | 0.096 | 0.35 | 0.35 | 0.984 | 0.1016 |
+| 600 | 1.2e-6 | 0.100 | 0.32 | 0.32 | 0.978 | 0.0995 |
+| 785 / 789 | 5.0e-7 | 0.095 | 0.30 | 0.31 | 0.976 | **0.0973** |
+
+The main LM loss starts low, around 0.10, because the targets are the model's own samples (self-distillation), and
+it falls only slightly. The multi-token-prediction head's loss falls 3×, from 1.01 to 0.31, as it adapts to the new
+output style.
+
+**GPU time for the whole fine-tuning side**
+
+| Job | GPUs × wall time | GPU-hours | Note |
+|---|---|---|---|
+| Import HF → Megatron | 4 × 2.1 min | 0.1 | |
+| Packing | 8 × 85 min | 11.3 | CPU-bound tokenisation (1 worker) on GPU nodes; GPUs idle, so pack in a CPU job next time |
+| **SFT** | **16 × 52.5 min** | **14.0** | |
+| Export Megatron → HF | 4 × 1.8 min | 0.1 | |
+| Dynamo eval of the fine-tuned model | 16 × 35.7 min | 9.5 | 110,188 requests |
+| Upload | 1 node × 2 min | – | 65.8 GB |
+
+### 4.5 Export and upload
 * Megatron → HF conversion uses `run_conversion.py export` with EP4. The base model's `config.json`, tokenizer
   files and license are copied over, because the export writes `max_position_embeddings=4096`.
 * The result is 14 safetensors shards, 65.8 GB.
@@ -268,6 +408,7 @@ log is `pipeline-sft-rows-e1.log`, and generation progress is in `$PROJ/gen/<tag
 | `mk_bench_sft.py` | small SFT set used only for the parallelism benchmark |
 | `pipeline.sh` | the whole remaining flow as one Slurm `afterok` chain (`FROM`, `STAGES`, `SFT_DATA`) |
 | `eval_report.py`, `upload_hf.py` | base-vs-FT report (W&B + card facts), model upload |
+| `tools/wandb_sysstats.py` | per-GPU system metrics (utilisation, SM / tensor activity, power, NVLink) of a W&B run |
 | `setup_login.sh`, `setup.sbatch`, `../tools/ngc_tags.py` | one-off setup: venv, model download, aarch64 image import |
 
 ---
