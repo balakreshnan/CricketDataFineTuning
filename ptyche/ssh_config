@@ -1,0 +1,7 @@
+# Used by ptyche/bin/ptyche-bridge (Git Bash's ssh). Same single-session relay as EOS/Hecate (no multiplexing on Windows).
+Host ptyche
+    HostName login-ptyche
+    User bbalakreshna-mfa
+    ServerAliveInterval 60
+    ServerAliveCountMax 5
+    UserKnownHostsFile /c/Users/bbalakreshna/.ssh/known_hosts
