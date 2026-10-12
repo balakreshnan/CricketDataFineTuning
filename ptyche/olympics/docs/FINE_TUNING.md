@@ -361,7 +361,7 @@ sequenceDiagram
     participant HE as HybridEP dispatcher (NVLink, inside EP group)
     participant EX as Expert GPUs in the same EP group
     participant AR as Gradient all-reduce
-    participant OPT as Optimizer
+    participant OP as Optimizer
     loop 4 micro-batches (gradient accumulation)
         DL->>G: 1 packed 8,192-token sequence (≈ 4.5 rows) + loss mask
         G->>G: Mamba / attention blocks (per-row boundaries)
@@ -377,9 +377,9 @@ sequenceDiagram
     end
     G->>AR: dense + Mamba grads: all-reduce over 16 ranks
     EX->>AR: expert grads: all-reduce over the 2 expert copies
-    AR->>OPT: averaged gradients
-    OPT->>G: Adam update (recipe defaults), LR from warm-up + cosine schedule
-    Note over DL,OPT: ≈ 3.34 s per step · 64 sequences · ≈ 517K tokens
+    AR->>OP: averaged gradients
+    OP->>G: Adam update (recipe defaults), LR from warm-up + cosine schedule
+    Note over DL,OP: ≈ 3.34 s per step · 64 sequences · ≈ 517K tokens
 ```
 
 ### 8.3 Timeline of the run
