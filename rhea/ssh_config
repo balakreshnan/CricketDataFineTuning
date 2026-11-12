@@ -1,0 +1,8 @@
+# Used by rhea/bin/rhea-bridge (Git Bash's ssh). Single-session relay, same as Hecate/EOS/Ptyche.
+# EDIT HostName/User to the Rhea login node you use (MFA users here are usually <user>-mfa).
+Host rhea
+    HostName login-rhea.nvidia.com
+    User bbalakreshna-mfa
+    ServerAliveInterval 60
+    ServerAliveCountMax 5
+    UserKnownHostsFile /c/Users/bbalakreshna/.ssh/known_hosts

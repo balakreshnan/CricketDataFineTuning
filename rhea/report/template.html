@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cricket LoRA Run Report</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f6f5f2; --surface:#fcfcfb; --border:#e3e1da; --grid:#e9e7e0;
+  --text:#0b0b0b; --text2:#52514e; --muted:#84827a;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --good:#1a7f37; --bad:#b3261e;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#111110; --surface:#1a1a19; --border:#33322f; --grid:#2a2a27;
+    --text:#f0efec; --text2:#c3c2b7; --muted:#8f8e85;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --good:#4cc26b; --bad:#f2817a;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111110; --surface:#1a1a19; --border:#33322f; --grid:#2a2a27;
+  --text:#f0efec; --text2:#c3c2b7; --muted:#8f8e85;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --good:#4cc26b; --bad:#f2817a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1080px;margin:0 auto;padding:28px 16px 64px}
+h1{font-size:26px;line-height:1.2;margin:0 0 6px}
+h2{font-size:18px;margin:36px 0 4px}
+h3{font-size:14px;margin:0 0 2px;font-weight:600}
+p{margin:6px 0}
+.sub{color:var(--text2);max-width:72ch}
+.note{color:var(--muted);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+.grid{display:grid;gap:12px}
+.tiles{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-top:18px}
+.tile .k{color:var(--text2);font-size:13px}
+.tile .v{font-size:26px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.25}
+.tile .v small{font-size:14px;font-weight:500;color:var(--muted)}
+.tile .d{font-size:13px;font-variant-numeric:tabular-nums}
+.up{color:var(--good)} .down{color:var(--bad)} .flat{color:var(--muted)}
+.two{grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--text2);margin:6px 0 2px}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+.legend i.dot{width:9px;height:9px;border-radius:50%}
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{fill:var(--text2);font-size:12px;font-variant-numeric:tabular-nums}
+svg .lab{fill:var(--text);font-size:13px}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:10px 0 4px}
+button,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer}
+button.primary{background:var(--s1);border-color:var(--s1);color:#fff;min-width:84px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--s1);outline-offset:2px}
+input[type=range]{flex:1;min-width:160px;accent-color:var(--s1)}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:8px 0 10px}
+.readout div{border:1px solid var(--border);border-radius:8px;padding:6px 10px}
+.readout .k{font-size:12px;color:var(--text2)}
+.readout .v{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+#tip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);display:none;z-index:9;font-variant-numeric:tabular-nums;max-width:260px}
+#tip b{font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--text2);font-weight:600}
+.scroll{overflow-x:auto}
+ul.ins{padding-left:20px;margin:8px 0}
+ul.ins li{margin:8px 0;max-width:80ch}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--text2);font-size:13px}
+.ex{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:10px}
+.ex pre{white-space:pre-wrap;word-break:break-word;font:12px/1.45 ui-monospace,Consolas,monospace;margin:6px 0 0;max-height:320px;overflow:auto;color:var(--text2)}
+.q{font-size:13px;color:var(--text2);white-space:pre-wrap}
+.tag{display:inline-block;font-size:12px;border:1px solid var(--border);border-radius:999px;padding:1px 8px;color:var(--text2)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Qwen3.8-27B cricket reasoning LoRA: training replay and before/after</h1>
+  <p class="sub" id="lede"></p>
+  <div class="grid tiles" id="tiles"></div>
+
+  <h2>What the run shows</h2>
+  <div class="card"><ul class="ins" id="insights"></ul></div>
+
+  <h2>Training replay</h2>
+  <p class="sub">One epoch over the training set, 1,788 optimizer steps at global batch 256. Press play to watch the loss curve draw; drag the slider to scrub; hover the chart for exact values.</p>
+  <div class="card">
+    <div class="controls">
+      <button class="primary" id="play" aria-label="Play or pause the replay">Play</button>
+      <button id="restart">Restart</button>
+      <label class="note" for="speed">Speed</label>
+      <select id="speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option></select>
+      <input type="range" id="scrub" min="1" max="1788" value="1788" aria-label="Training step">
+    </div>
+    <div class="readout" id="readout"></div>
+    <h3>Loss by optimizer step</h3>
+    <div class="legend"><span><i style="background:var(--s1);opacity:.35"></i>Train loss (logged every 5 steps)</span><span><i style="background:var(--s1)"></i>Train loss, smoothed</span><span><i class="dot" style="background:var(--s2)"></i>Dev loss (1,000 held-out rows)</span></div>
+    <svg id="lossChart" viewBox="0 0 1000 340" role="img" aria-label="Training and dev loss by step"></svg>
+    <h3 style="margin-top:14px">Learning rate by optimizer step</h3>
+    <svg id="lrChart" viewBox="0 0 1000 130" role="img" aria-label="Learning rate by step"></svg>
+    <h3 style="margin-top:14px">Gradient norm by optimizer step</h3>
+    <svg id="gnChart" viewBox="0 0 1000 130" role="img" aria-label="Gradient norm by step"></svg>
+  </div>
+
+  <h2>Before and after: 600-question benchmark</h2>
+  <p class="sub" id="evalSub"></p>
+  <div class="legend"><span><i class="dot" style="background:var(--s1)"></i>Base Qwen3.8-27B</span><span><i class="dot" style="background:var(--s2)"></i>Fine-tuned (LoRA merged)</span></div>
+  <div class="grid two">
+    <div class="card"><h3>Accuracy by question type</h3><p class="note">Percent of samples with the exact right answer. Axis starts at <span id="accMin"></span>%.</p><svg id="accChart" viewBox="0 0 480 250" role="img" aria-label="Accuracy before and after"></svg></div>
+    <div class="card"><h3>Mean reasoning length</h3><p class="note">Generated tokens per sample (thinking plus answer).</p><svg id="tokChart" viewBox="0 0 480 250" role="img" aria-label="Mean tokens before and after"></svg></div>
+    <div class="card"><h3>Reasoning length distribution</h3><p class="note">Samples per token-count bucket.</p><svg id="histChart" viewBox="0 0 480 250" role="img" aria-label="Token length histogram"></svg></div>
+    <div class="card"><h3>Same question, same sample slot</h3><p class="note">Each of the paired samples, classified by which model got it right.</p><svg id="pairChart" viewBox="0 0 480 250" role="img" aria-label="Paired outcomes"></svg></div>
+  </div>
+  <details open><summary>Table view of the benchmark numbers</summary><div class="card scroll" style="margin-top:8px"><table id="evalTable"></table></div></details>
+
+  <h2>One question, both models</h2>
+  <div class="card" id="example"></div>
+
+  <h2>Run facts</h2>
+  <div class="card scroll"><table id="facts"></table></div>
+  <p class="note" id="foot"></p>
+</main>
+<div id="tip"></div>
+<script>
+const D = /*DATA*/null;
+const $ = s => document.querySelector(s), NS = "http://www.w3.org/2000/svg";
+const el = (t, a = {}, txt) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; return e; };
+const fmt = (x, d = 2) => x.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (x, d = 2) => fmt(x * 100, d) + "%";
+const tip = $("#tip");
+function showTip(ev, html) { tip.innerHTML = html; tip.style.display = "block"; const w = tip.offsetWidth, h = tip.offsetHeight; let x = ev.clientX + 14, y = ev.clientY + 14; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + h > innerHeight - 8) y = ev.clientY - h - 14; tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px"; }
+const hideTip = () => tip.style.display = "none";
+function hover(node, html) { node.addEventListener("mousemove", e => showTip(e, typeof html === "function" ? html() : html)); node.addEventListener("mouseleave", hideTip); }
+const TYPES = D.types, LABEL = { overall: "Overall", run_rate: "Run rate", chase_rate: "Chase rate", milestone: "Milestone" };
+const B = D.eval.base, F = D.eval.ft, K = D.eval.k;
+
+/* ---------- headline ---------- */
+const dAcc = (F.overall.accuracy - B.overall.accuracy) * 100, dTok = F.overall.mean_tokens / B.overall.mean_tokens - 1;
+$("#lede").textContent = D.lede;
+function tile(k, v, d, cls) { return `<div class="card tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d ${cls || "flat"}">${d}</div></div>`; }
+const sign = (x, d = 2) => (x >= 0 ? "+" : "") + fmt(x, d);
+$("#tiles").innerHTML =
+  tile("Benchmark accuracy", `${pct(B.overall.accuracy, 1)} <small>to</small> ${pct(F.overall.accuracy, 1)}`, `${sign(dAcc)} points (95% CI ${sign(D.eval.ci[0])} to ${sign(D.eval.ci[1])})`, D.eval.ci[0] > 0 ? "up" : D.eval.ci[1] < 0 ? "down" : "flat") +
+  tile("Mean reasoning tokens", `${fmt(B.overall.mean_tokens, 0)} <small>to</small> ${fmt(F.overall.mean_tokens, 0)}`, `${sign(dTok * 100, 0)}% per answer`, dTok < 0 ? "up" : "down") +
+  tile("Truncated at the token cap", `${pct(B.overall.truncated_rate, 2)} <small>to</small> ${pct(F.overall.truncated_rate, 2)}`, `cap ${fmt(D.eval.max_new_tokens, 0)} tokens`, F.overall.truncated_rate < B.overall.truncated_rate ? "up" : "flat") +
+  tile("Dev loss", `${fmt(D.dev[0].v, 4)} <small>to</small> ${fmt(D.dev[D.dev.length - 1].v, 4)}`, `step ${D.dev[0].s} to ${D.dev[D.dev.length - 1].s}`, "flat") +
+  tile("Training time", `${D.facts.train_hours} h`, `${D.facts.gpus} GPUs on ${D.facts.nodes} nodes`, "flat");
+$("#insights").innerHTML = D.insights.map(t => `<li>${t}</li>`).join("");
+
+/* ---------- generic axes ---------- */
+function frame(svg, W, H, m, x0, x1, y0, y1, yt, xt, yf) {
+  const X = v => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r), Y = v => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+  yt.forEach(v => { svg.append(el("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)" })); svg.append(el("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end" }, yf(v))); });
+  xt.forEach(v => svg.append(el("text", { x: X(v), y: H - m.b + 16, "text-anchor": "middle" }, fmt(v, 0))));
+  return { X, Y };
+}
+const path = (pts, X, Y) => pts.map((p, i) => (i ? "L" : "M") + X(p.s).toFixed(1) + " " + Y(p.v).toFixed(1)).join("");
+const ticks = (a, b, n) => { const st = (b - a) / n; return Array.from({ length: n + 1 }, (_, i) => a + st * i); };
+
+/* ---------- training replay ---------- */
+const T = D.train, N = D.facts.steps, XT = [0, 300, 600, 900, 1200, 1500, N];
+const ema = []; { let e = T[0].loss; T.forEach(p => { e = 0.85 * e + 0.15 * p.loss; ema.push({ s: p.s, v: e }); }); }
+const lossPts = T.map(p => ({ s: p.s, v: p.loss })), lrPts = T.map(p => ({ s: p.s, v: p.lr })), gnPts = T.map(p => ({ s: p.s, v: p.gn }));
+const lo = Math.floor(Math.min(...T.slice(3).map(p => p.loss), ...D.dev.map(p => p.v)) * 100) / 100, hi = Math.ceil(Math.max(...T.map(p => p.loss)) * 100) / 100;
+const M = { l: 56, r: 16, t: 10, b: 26 };
+const charts = [];
+function lineChart(id, H, y0, y1, n, yf, layers, name) {
+  const svg = $(id), W = 1000, f = frame(svg, W, H, M, 0, N, y0, y1, ticks(y0, y1, n), XT, yf);
+  const clip = el("clipPath", { id: id.slice(1) + "c" }), cr = el("rect", { x: M.l, y: 0, width: 0, height: H }); clip.append(cr); svg.append(clip);
+  const g = el("g", { "clip-path": `url(#${id.slice(1)}c)` }); svg.append(g);
+  layers.forEach(L => { if (L.dots) L.pts.forEach(p => g.append(el("circle", { cx: f.X(p.s), cy: f.Y(p.v), r: 5, fill: L.c, stroke: "var(--surface)", "stroke-width": 2 }))); else g.append(el("path", { d: path(L.pts, f.X, f.Y), fill: "none", stroke: L.c, "stroke-width": L.w || 2, opacity: L.o || 1, "stroke-linejoin": "round" })); });
+  const cross = el("line", { y1: M.t, y2: H - M.b, stroke: "var(--muted)", "stroke-dasharray": "3 3", visibility: "hidden" }); svg.append(cross);
+  const head = el("line", { y1: M.t, y2: H - M.b, stroke: "var(--text2)", "stroke-width": 1 }); svg.append(head);
+  const hit = el("rect", { x: M.l, y: 0, width: W - M.l - M.r, height: H, fill: "transparent" }); svg.append(hit);
+  hit.addEventListener("mousemove", e => { const r = svg.getBoundingClientRect(), sx = (e.clientX - r.left) / r.width * W, s = Math.max(1, Math.min(N, (sx - M.l) / (W - M.l - M.r) * N)); let i = 0; while (i < T.length - 1 && T[i + 1].s <= s) i++; const p = T[i]; charts.forEach(c => { c.cross.setAttribute("x1", c.f.X(p.s)); c.cross.setAttribute("x2", c.f.X(p.s)); c.cross.setAttribute("visibility", "visible"); }); const dv = D.dev.filter(d => d.s <= p.s).pop(); showTip(e, `<b>Step ${fmt(p.s, 0)}</b> (epoch ${fmt(p.s / N, 3)})<br>Train loss ${fmt(p.loss, 4)}<br>Smoothed ${fmt(ema[i].v, 4)}${dv ? `<br>Dev loss ${fmt(dv.v, 4)} (step ${dv.s})` : ""}<br>LR ${p.lr.toExponential(2)}<br>Grad norm ${fmt(p.gn, 3)}`); });
+  hit.addEventListener("mouseleave", () => { hideTip(); charts.forEach(c => c.cross.setAttribute("visibility", "hidden")); });
+  charts.push({ f, cr, cross, head, W });
+}
+lineChart("#lossChart", 340, lo, hi, Math.round((hi - lo) * 100), v => fmt(v, 2), [{ pts: lossPts, c: "var(--s1)", w: 1, o: .35 }, { pts: ema, c: "var(--s1)", w: 2 }, { pts: D.dev, c: "var(--s2)", w: 1.5 }, { pts: D.dev, c: "var(--s2)", dots: true }]);
+lineChart("#lrChart", 130, 0, 1e-4, 2, v => v ? v.toExponential(0) : "0", [{ pts: lrPts, c: "var(--s3)", w: 2 }]);
+const gmax = Math.ceil(Math.max(...T.map(p => p.gn)) * 20) / 20;
+lineChart("#gnChart", 130, 0, gmax, 2, v => fmt(v, 2), [{ pts: gnPts, c: "var(--s3)", w: 1.5 }]);
+const RO = [["Step", s => `${fmt(s, 0)} / ${fmt(N, 0)}`], ["Epoch", s => fmt(s / N, 3)], ["Rows seen", s => fmt(Math.min(s * D.facts.global_batch, D.facts.train_rows), 0)], ["Train loss (smoothed)", (s, i) => fmt(ema[i].v, 4)], ["Dev loss", s => { const d = D.dev.filter(d => d.s <= s).pop(); return d ? fmt(d.v, 4) : "not yet"; }], ["Learning rate", (s, i) => T[i].lr.toExponential(2)]];
+$("#readout").innerHTML = RO.map((r, i) => `<div><div class="k">${r[0]}</div><div class="v" id="ro${i}"></div></div>`).join("");
+let cur = N, playing = false, last = 0;
+function draw(s) {
+  cur = Math.max(1, Math.min(N, s)); let i = 0; while (i < T.length - 1 && T[i + 1].s <= cur) i++;
+  charts.forEach(c => { const x = c.f.X(cur); c.cr.setAttribute("width", Math.max(0, x - M.l + 6)); c.head.setAttribute("x1", x); c.head.setAttribute("x2", x); });
+  RO.forEach((r, k) => $("#ro" + k).textContent = r[1](Math.round(cur), i)); $("#scrub").value = Math.round(cur);
+}
+function tick(t) { if (!playing) return; const dt = Math.min(100, t - last); last = t; draw(cur + dt / 1000 * (N / 24) * +$("#speed").value); if (cur >= N) { playing = false; $("#play").textContent = "Replay"; return; } requestAnimationFrame(tick); }
+function play() { if (cur >= N) cur = 1; playing = true; $("#play").textContent = "Pause"; last = performance.now(); requestAnimationFrame(tick); }
+$("#play").onclick = () => { if (playing) { playing = false; $("#play").textContent = "Play"; } else play(); };
+$("#restart").onclick = () => { cur = 1; draw(1); play(); };
+$("#scrub").oninput = e => { playing = false; $("#play").textContent = "Play"; draw(+e.target.value); };
+draw(N);
+if (!matchMedia("(prefers-reduced-motion: reduce)").matches) { cur = 1; draw(1); setTimeout(play, 500); }
+
+/* ---------- before / after ---------- */
+$("#evalSub").textContent = D.evalSub;
+(function acc() {
+  const svg = $("#accChart"), W = 480, H = 250, m = { l: 86, r: 44, t: 8, b: 26 }, all = TYPES.flatMap(t => [B[t].accuracy, F[t].accuracy]);
+  const a0 = Math.max(0, Math.floor((Math.min(...all) * 100 - 2) / 5) * 5), f = frame(svg, W, H, m, a0, 100, 0, 1, [], ticks(a0, 100, (100 - a0) / 5 > 6 ? 5 : (100 - a0) / 5), v => v); $("#accMin").textContent = a0;
+  ticks(a0, 100, (100 - a0) / 5 > 6 ? 5 : (100 - a0) / 5).forEach(v => svg.insertBefore(el("line", { x1: f.X(v), x2: f.X(v), y1: m.t, y2: H - m.b, stroke: "var(--grid)" }), svg.firstChild));
+  TYPES.forEach((t, i) => {
+    const y = m.t + (i + .5) * (H - m.t - m.b) / TYPES.length, xb = f.X(B[t].accuracy * 100), xf = f.X(F[t].accuracy * 100);
+    svg.append(el("text", { x: m.l - 10, y: y + 4, "text-anchor": "end", class: "lab" }, LABEL[t]));
+    svg.append(el("line", { x1: xb, x2: xf, y1: y, y2: y, stroke: "var(--muted)", "stroke-width": 2 }));
+    [[xb, "var(--s1)", "Base", B[t]], [xf, "var(--s2)", "Fine-tuned", F[t]]].forEach(([x, c, n, d]) => { const ci = el("circle", { cx: x, cy: y, r: 7, fill: c, stroke: "var(--surface)", "stroke-width": 2 }); svg.append(ci); hover(ci, `<b>${LABEL[t]} - ${n}</b><br>Accuracy ${pct(d.accuracy)}<br>Any of ${K} samples right: ${pct(d["pass@" + K])}<br>${fmt(d.samples, 0)} samples, ${d.questions} questions`); });
+    const hiX = Math.max(xb, xf), dd = (F[t].accuracy - B[t].accuracy) * 100;
+    svg.append(el("text", { x: Math.min(hiX + 12, W - 2), y: y - 10, "text-anchor": hiX + 12 > W - 40 ? "end" : "start", class: "lab" }, `${fmt(B[t].accuracy * 100, 1)} to ${fmt(F[t].accuracy * 100, 1)} (${sign(dd, 1)})`));
+  });
+})();
+(function tok() {
+  const svg = $("#tokChart"), W = 480, H = 250, m = { l: 86, r: 52, t: 8, b: 26 }, mx = Math.max(...TYPES.flatMap(t => [B[t].mean_tokens, F[t].mean_tokens])), top = Math.ceil(mx / 200) * 200, f = frame(svg, W, H, m, 0, top, 0, 1, [], ticks(0, top, 4), v => v);
+  ticks(0, top, 4).forEach(v => svg.insertBefore(el("line", { x1: f.X(v), x2: f.X(v), y1: m.t, y2: H - m.b, stroke: "var(--grid)" }), svg.firstChild));
+  const bh = 16;
+  TYPES.forEach((t, i) => {
+    const y = m.t + (i + .5) * (H - m.t - m.b) / TYPES.length;
+    svg.append(el("text", { x: m.l - 10, y: y + 4, "text-anchor": "end", class: "lab" }, LABEL[t]));
+    [[B[t], "var(--s1)", -bh - 1, "Base"], [F[t], "var(--s2)", 1, "Fine-tuned"]].forEach(([d, c, off, n]) => { const w = f.X(d.mean_tokens) - m.l, r = el("path", { d: `M${m.l} ${y + off}h${Math.max(0, w - 4)}a4 4 0 0 1 4 4v${bh - 8}a4 4 0 0 1 -4 4h${-Math.max(0, w - 4)}z`, fill: c }); svg.append(r); svg.append(el("text", { x: m.l + w + 6, y: y + off + bh - 4, class: "lab" }, fmt(d.mean_tokens, 0))); hover(r, `<b>${LABEL[t]} - ${n}</b><br>Mean tokens ${fmt(d.mean_tokens, 0)}<br>Mean when correct ${fmt(d.mean_tokens_correct, 0)}<br>Truncated ${pct(d.truncated_rate)}`); });
+  });
+})();
+(function hist() {
+  const svg = $("#histChart"), W = 480, H = 250, m = { l: 44, r: 12, t: 8, b: 38 }, E = D.hist.edges, n = E.length - 1, mx = Math.max(...D.hist.base, ...D.hist.ft), top = Math.ceil(mx / 100) * 100;
+  const f = frame(svg, W, H, m, 0, n, 0, top, ticks(0, top, 4), [], v => fmt(v, 0)), bw = (W - m.l - m.r) / n;
+  for (let i = 0; i < n; i++) {
+    const lab = i === n - 1 ? E[i] + "+" : E[i] + "-" + E[i + 1];
+    [[D.hist.base[i], "var(--s1)", 0, "Base"], [D.hist.ft[i], "var(--s2)", 1, "Fine-tuned"]].forEach(([v, c, k, nm]) => { const w = (bw - 6) / 2 - 1, x = m.l + i * bw + 3 + k * (w + 2), y = f.Y(v), h = H - m.b - y; if (v > 0) { const r = el("path", { d: h > 4 ? `M${x} ${H - m.b}v${-(h - 3)}a3 3 0 0 1 3 -3h${w - 6}a3 3 0 0 1 3 3v${h - 3}z` : `M${x} ${H - m.b}v${-h}h${w}v${h}z`, fill: c }); svg.append(r); hover(r, `<b>${lab} tokens - ${nm}</b><br>${fmt(v, 0)} samples (${pct(v / D.eval.samples, 1)})`); } });
+    const tx = el("text", { x: m.l + (i + .5) * bw, y: H - m.b + 12, "text-anchor": "end", transform: `rotate(-35 ${m.l + (i + .5) * bw} ${H - m.b + 12})` }, lab); svg.append(tx);
+  }
+})();
+(function pair() {
+  const svg = $("#pairChart"), W = 480, H = 250, P = D.pairs, tot = P.both + P.fixed + P.broken + P.neither;
+  const rows = [["Both right", P.both, "var(--muted)"], ["Only fine-tuned right", P.fixed, "var(--s2)"], ["Only base right", P.broken, "var(--s1)"], ["Both wrong", P.neither, "var(--muted)"]], m = { l: 150, r: 70 }, mx = Math.max(P.fixed, P.broken, P.neither, 1);
+  rows.forEach(([n, v, c], i) => { const y = 24 + i * 52, full = W - m.l - m.r, w = i === 0 ? full : Math.max(2, v / mx * full * .8); svg.append(el("text", { x: m.l - 10, y: y + 15, "text-anchor": "end", class: "lab" }, n)); const r = el("rect", { x: m.l, y, width: w, height: 22, rx: 4, fill: c, opacity: i === 0 || i === 3 ? .45 : 1 }); svg.append(r); svg.append(el("text", { x: m.l + w + 8, y: y + 15, class: "lab" }, `${fmt(v, 0)} (${pct(v / tot, 1)})`)); hover(r, `<b>${n}</b><br>${fmt(v, 0)} of ${fmt(tot, 0)} paired samples`); });
+  svg.append(el("text", { x: m.l, y: H - 6 }, "Top bar is not to scale with the three below it."));
+})();
+(function table() {
+  const cols = [["Accuracy", d => pct(d.accuracy)], [`Any of ${K} right`, d => pct(d["pass@" + K])], ["Mean tokens", d => fmt(d.mean_tokens, 0)], ["Truncated", d => pct(d.truncated_rate)], ["No answer", d => pct(d.no_answer_rate)]];
+  let h = "<tr><th>Question type</th><th>Model</th>" + cols.map(c => `<th>${c[0]}</th>`).join("") + "<th>Samples</th></tr>";
+  TYPES.forEach(t => [["Base", B[t]], ["Fine-tuned", F[t]]].forEach(([n, d]) => h += `<tr><td>${LABEL[t]}</td><td style="text-align:left">${n}</td>${cols.map(c => `<td>${c[1](d)}</td>`).join("")}<td>${fmt(d.samples, 0)}</td></tr>`));
+  $("#evalTable").innerHTML = h;
+})();
+const esc = s => s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+(function example() {
+  const X = D.example; if (!X) { $("#example").textContent = "No example available."; return; }
+  $("#example").innerHTML = `<span class="tag">${LABEL[X.qtype]}</span> <span class="tag">correct answer ${X.gold}</span><p class="q">${esc(X.question)}</p><div class="ex">` + [["Base", X.base], ["Fine-tuned", X.ft]].map(([n, r]) => `<div><h3>${n}: ${fmt(r.n_tokens, 0)} tokens, answered ${r.pred == null ? "nothing" : r.pred} (${r.correct ? "correct" : "wrong"})</h3><pre>${esc(r.text)}</pre></div>`).join("") + `</div><p class="note">${esc(X.why)}</p>`;
+})();
+$("#facts").innerHTML = D.factRows.map(r => `<tr><td>${r[0]}</td><td style="text-align:left;white-space:normal">${r[1]}</td></tr>`).join("");
+$("#foot").textContent = D.foot;
+</script>
+</body>
+</html>

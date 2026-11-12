@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hecate vs Rhea Fine-Tune</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f6f5f2; --surface:#fcfcfb; --border:#e3e1da; --grid:#e9e7e0;
+  --text:#0b0b0b; --text2:#52514e; --muted:#84827a; --wait:#cfcdc4;
+  --hecate:#2a78d6; --rhea:#eb6834; --good:#1a7f37; --bad:#b3261e;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#111110; --surface:#1a1a19; --border:#33322f; --grid:#2a2a27;
+    --text:#f0efec; --text2:#c3c2b7; --muted:#8f8e85; --wait:#4a4945;
+    --hecate:#3987e5; --rhea:#d95926; --good:#4cc26b; --bad:#f2817a;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111110; --surface:#1a1a19; --border:#33322f; --grid:#2a2a27;
+  --text:#f0efec; --text2:#c3c2b7; --muted:#8f8e85; --wait:#4a4945;
+  --hecate:#3987e5; --rhea:#d95926; --good:#4cc26b; --bad:#f2817a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1080px;margin:0 auto;padding:28px 16px 64px}
+h1{font-size:26px;line-height:1.2;margin:0 0 6px}
+h2{font-size:18px;margin:36px 0 4px}
+h3{font-size:14px;margin:0 0 2px;font-weight:600}
+p{margin:6px 0}
+.sub{color:var(--text2);max-width:74ch}
+.note{color:var(--muted);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+.grid{display:grid;gap:12px}
+.tiles{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:18px}
+.tile .k{color:var(--text2);font-size:13px}
+.tile .row{display:flex;flex-wrap:wrap;align-items:center;column-gap:8px;font-variant-numeric:tabular-nums;margin-top:8px}
+.tile .row b{font-size:21px;font-weight:650;line-height:1.2}
+.tile .row span{font-size:13px;color:var(--text2);flex-basis:100%;padding-left:18px}
+.sw{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none;align-self:center}
+.two{grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--text2);margin:6px 0 2px}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+.legend i.dot{width:10px;height:10px;border-radius:50%}
+.legend i.ring{width:10px;height:10px;border-radius:50%;background:var(--surface);border:2px solid var(--text2)}
+.legend i.box{width:12px;height:10px;border-radius:2px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{fill:var(--text2);font-size:12px;font-variant-numeric:tabular-nums}
+svg .lab{fill:var(--text);font-size:13px}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:10px 0 4px}
+button,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer}
+button.primary{background:var(--hecate);border-color:var(--hecate);color:#fff;min-width:84px}
+button[aria-pressed="true"]{background:var(--text);color:var(--surface);border-color:var(--text)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--hecate);outline-offset:2px}
+input[type=range]{flex:1;min-width:160px;accent-color:var(--hecate)}
+.race{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px;margin:8px 0 12px}
+.lane{border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.lane h3{display:flex;align-items:center;gap:8px}
+.bar{height:10px;border-radius:5px;background:var(--grid);margin:8px 0;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:5px;width:0}
+.lane dl{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:0}
+.lane dt{font-size:12px;color:var(--text2)}
+.lane dd{margin:0;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.done{font-size:12px;font-weight:600;color:var(--good);margin-left:auto}
+#tip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);display:none;z-index:9;font-variant-numeric:tabular-nums;max-width:280px}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;vertical-align:top}
+th:first-child,td:first-child,td.l,th.l{text-align:left}
+th{color:var(--text2);font-weight:600}
+tr.diff td{background:color-mix(in srgb,var(--rhea) 9%,transparent)}
+.scroll{overflow-x:auto}
+ul.ins{padding-left:20px;margin:8px 0}
+ul.ins li{margin:8px 0;max-width:82ch}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--text2);font-size:13px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Qwen3.8-27B cricket LoRA: Hecate vs Rhea</h1>
+  <p class="sub" id="lede"></p>
+  <div class="legend"><span><i class="dot" style="background:var(--hecate)"></i>Hecate (7 Oct 2026)</span><span><i class="dot" style="background:var(--rhea)"></i>Rhea (11 Nov 2026)</span></div>
+  <div class="grid tiles" id="tiles"></div>
+
+  <h2>What the comparison shows</h2>
+  <div class="card"><ul class="ins" id="insights"></ul></div>
+
+  <h2>Training race replay</h2>
+  <p class="sub">Both runs replayed on the same clock of training time. Hecate's 6-hour queue wait between its two allocations is left out here and shown in the time chart further down. Press play, drag the slider, or hover any chart.</p>
+  <div class="card">
+    <div class="controls">
+      <button class="primary" id="play" aria-label="Play or pause the replay">Play</button>
+      <button id="restart">Restart</button>
+      <label class="note" for="speed">Speed</label>
+      <select id="speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option></select>
+      <input type="range" id="scrub" min="0" max="1000" value="1000" aria-label="Training time">
+      <span class="note" id="clock"></span>
+    </div>
+    <div class="race" id="race"></div>
+    <h3>Steps completed by training time</h3>
+    <svg id="progChart" viewBox="0 0 1000 280" role="img" aria-label="Steps completed over training time for both clusters"></svg>
+    <h3 style="margin-top:14px">Training loss by step (smoothed), with dev loss points</h3>
+    <svg id="lossChart" viewBox="0 0 1000 280" role="img" aria-label="Training loss by step for both clusters"></svg>
+    <h3 style="margin-top:14px">Seconds per step (60-step window)</h3>
+    <svg id="paceChart" viewBox="0 0 1000 200" role="img" aria-label="Seconds per step for both clusters"></svg>
+  </div>
+
+  <h2>Time taken</h2>
+  <div class="grid two">
+    <div class="card"><h3>Wall clock, first job start to finished adapter</h3>
+      <div class="legend"><span><i class="box" style="background:var(--text2)"></i>Training (cluster colour)</span><span><i class="box" style="background:var(--text2);opacity:.45"></i>Startup: load and tokenize</span><span><i class="box" style="background:var(--wait)"></i>Waiting in the queue</span></div>
+      <svg id="wallChart" viewBox="0 0 480 170" role="img" aria-label="Wall clock breakdown"></svg></div>
+    <div class="card"><h3>Training compute</h3><p class="note">GPU-hours = training hours x 32 GPUs.</p><svg id="gpuChart" viewBox="0 0 480 150" role="img" aria-label="GPU hours"></svg></div>
+  </div>
+
+  <h2>Accuracy and reasoning length, before and after</h2>
+  <p class="sub">Same 600 held-out questions, 4 samples each, on both clusters. An answer counts only if it finishes and matches the exact number.</p>
+  <div class="legend"><span><i class="ring"></i>Base model</span><span><i class="dot" style="background:var(--text2)"></i>Fine-tuned</span><span><i class="dot" style="background:var(--hecate)"></i>Hecate</span><span><i class="dot" style="background:var(--rhea)"></i>Rhea</span></div>
+  <div class="grid two">
+    <div class="card"><h3>Accuracy, %</h3><p class="note">Axis starts at <span id="accMin"></span>%.</p><svg id="accChart" viewBox="0 0 480 330" role="img" aria-label="Accuracy before and after on both clusters"></svg></div>
+    <div class="card"><h3>Mean reasoning tokens per answer</h3><p class="note">Lower is shorter reasoning.</p><svg id="tokChart" viewBox="0 0 480 330" role="img" aria-label="Mean tokens before and after on both clusters"></svg></div>
+    <div class="card"><h3>Reasoning length distribution</h3>
+      <div class="controls" style="margin:4px 0"><button id="hBase" aria-pressed="false">Base model</button><button id="hFt" aria-pressed="true">Fine-tuned</button></div>
+      <svg id="histChart" viewBox="0 0 480 250" role="img" aria-label="Token length histogram"></svg></div>
+    <div class="card"><h3>Questions that changed</h3><p class="note">Of 600 questions, by whether the fine-tuned model got more or fewer of its 4 samples right.</p><svg id="chgChart" viewBox="0 0 480 210" role="img" aria-label="Questions improved and regressed"></svg></div>
+  </div>
+  <details open><summary>Table view of the benchmark numbers</summary><div class="card scroll" style="margin-top:8px"><table id="evalTable"></table></div></details>
+
+  <h2>Setup side by side</h2>
+  <p class="sub">Rows that differ between the two runs are shaded.</p>
+  <div class="card scroll"><table id="cfg"></table></div>
+  <p class="note" id="foot"></p>
+</main>
+<div id="tip"></div>
+<script>
+const D = /*DATA*/null;
+const $ = s => document.querySelector(s), NS = "http://www.w3.org/2000/svg";
+const el = (t, a = {}, txt) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; return e; };
+const fmt = (x, d = 2) => x.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (x, d = 2) => fmt(x * 100, d) + "%", sign = (x, d = 2) => (x >= 0 ? "+" : "") + fmt(x, d);
+const hm = s => { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return `${h} h ${String(m).padStart(2, "0")} min`; };
+const tip = $("#tip");
+function showTip(ev, html) { tip.innerHTML = html; tip.style.display = "block"; const w = tip.offsetWidth, h = tip.offsetHeight; let x = ev.clientX + 14, y = ev.clientY + 14; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + h > innerHeight - 8) y = ev.clientY - h - 14; tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px"; }
+const hideTip = () => tip.style.display = "none";
+function hover(node, html) { node.addEventListener("mousemove", e => showTip(e, html)); node.addEventListener("mouseleave", hideTip); }
+const IDS = ["hecate", "rhea"], RUN = D.runs, N = D.steps, K = D.k, TYPES = D.types;
+const COL = { hecate: "var(--hecate)", rhea: "var(--rhea)" }, LABEL = { overall: "Overall", run_rate: "Run rate", chase_rate: "Chase rate", milestone: "Milestone" };
+const dot = id => `<i class="sw" style="background:${COL[id]}"></i>`;
+
+/* ---------- derived series ---------- */
+IDS.forEach(id => {
+  const r = RUN[id]; let e = r.train[0].loss; r.ema = r.train.map(p => { e = 0.8 * e + 0.2 * p.loss; return { s: p.s, v: e }; });
+  r.ts = [[0, 0], ...r.train.map(p => [p.t, p.s]), [r.total_s, N]];
+  r.stepAt = t => { if (t >= r.total_s) return N; const a = r.ts; let i = 0; while (i < a.length - 2 && a[i + 1][0] <= t) i++; return a[i][1] + (a[i + 1][1] - a[i][1]) * (t - a[i][0]) / Math.max(1e-9, a[i + 1][0] - a[i][0]); };
+  r.at = s => { let i = 0; while (i < r.train.length - 1 && r.train[i + 1].s <= s) i++; return i; };
+});
+const TMAX = Math.max(...IDS.map(id => RUN[id].total_s));
+
+/* ---------- headline ---------- */
+$("#lede").textContent = D.lede; $("#foot").textContent = D.foot;
+$("#insights").innerHTML = D.insights.map(t => `<li>${t}</li>`).join("");
+const acc = (id, m, t = "overall") => RUN[id].eval[m][t].accuracy * 100, tok = (id, m, t = "overall") => RUN[id].eval[m][t].mean_tokens;
+function tile(k, f) { return `<div class="card tile"><div class="k">${k}</div>${IDS.map(id => `<div class="row">${dot(id)}<b>${f(id)[0]}</b><span>${f(id)[1]}</span></div>`).join("")}</div>`; }
+$("#tiles").innerHTML =
+  tile("Accuracy after fine-tuning", id => [fmt(acc(id, "ft")) + "%", `${sign(acc(id, "ft") - acc(id, "base"))} pts from ${fmt(acc(id, "base"))}%`]) +
+  tile("Reasoning tokens per answer", id => [fmt(tok(id, "ft"), 0), `${sign((tok(id, "ft") / tok(id, "base") - 1) * 100, 0)}% from ${fmt(tok(id, "base"), 0)}`]) +
+  tile("Training time", id => [fmt(RUN[id].train_h, 1) + " h", `${fmt(RUN[id].gpu_h, 0)} GPU-hours`]) +
+  tile("Start to finish", id => [fmt(RUN[id].wall_h, 1) + " h", `${RUN[id].allocations} allocation${RUN[id].allocations > 1 ? "s" : ""}`]) +
+  tile("Answers cut off at the cap", id => [pct(RUN[id].eval.ft.overall.truncated_rate, 2), `from ${pct(RUN[id].eval.base.overall.truncated_rate, 2)}`]);
+
+/* ---------- chart helpers ---------- */
+const ticks = (a, b, n) => Array.from({ length: n + 1 }, (_, i) => a + (b - a) / n * i);
+function frame(svg, W, H, m, x0, x1, y0, y1, yt, xt, yf, xf) {
+  const X = v => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r), Y = v => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+  yt.forEach(v => { svg.append(el("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)" })); svg.append(el("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end" }, yf(v))); });
+  xt.forEach(v => svg.append(el("text", { x: X(v), y: H - m.b + 16, "text-anchor": "middle" }, xf(v))));
+  return { X, Y };
+}
+const pathOf = (pts, X, Y) => pts.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1)).join("");
+const M = { l: 56, r: 64, t: 12, b: 26 }, W = 1000, XT = [0, 300, 600, 900, 1200, 1500, N];
+const clips = [];   // {rect, kind:'time'|'step', id, f}
+function mkClip(svg, name, H) { const c = el("clipPath", { id: name }), r = el("rect", { x: M.l, y: 0, width: 0, height: H }); c.append(r); svg.append(c); return r; }
+function crossLine(svg, H) { const c = el("line", { y1: M.t, y2: H - M.b, stroke: "var(--muted)", "stroke-dasharray": "3 3", visibility: "hidden" }); svg.append(c); return c; }
+
+/* progress by time */
+(function () {
+  const svg = $("#progChart"), H = 280, hrs = Math.ceil(TMAX / 3600 * 2) / 2, f = frame(svg, W, H, M, 0, hrs * 3600, 0, N, [0, 447, 894, 1341, N], ticks(0, hrs * 3600, hrs * 2), v => fmt(v, 0), v => fmt(v / 3600, 1) + " h");
+  const cr = mkClip(svg, "cProg", H); clips.push({ rect: cr, kind: "time", f });
+  const g = el("g", { "clip-path": "url(#cProg)" }); svg.append(g);
+  IDS.forEach(id => { const r = RUN[id]; g.append(el("path", { d: pathOf(r.ts, f.X, f.Y), fill: "none", stroke: COL[id], "stroke-width": 2.5, "stroke-linejoin": "round" })); g.append(el("circle", { cx: f.X(r.total_s), cy: f.Y(N), r: 5, fill: COL[id], stroke: "var(--surface)", "stroke-width": 2 })); });
+  IDS.forEach((id, i) => svg.append(el("text", { x: f.X(RUN[id].total_s) + 8, y: f.Y(N) + 4 + i * 0, class: "lab" }, `${RUN[id].name} ${fmt(RUN[id].train_h, 1)} h`)));
+  const cross = crossLine(svg, H), hit = el("rect", { x: M.l, y: 0, width: W - M.l - M.r, height: H, fill: "transparent" }); svg.append(hit);
+  hit.addEventListener("mousemove", e => { const b = svg.getBoundingClientRect(), sx = (e.clientX - b.left) / b.width * W, t = Math.max(0, Math.min(hrs * 3600, (sx - M.l) / (W - M.l - M.r) * hrs * 3600)); cross.setAttribute("x1", f.X(t)); cross.setAttribute("x2", f.X(t)); cross.setAttribute("visibility", "visible"); showTip(e, `<b>${hm(t)} of training</b><br>` + IDS.map(id => `${RUN[id].name}: step ${fmt(Math.round(RUN[id].stepAt(t)), 0)} (${fmt(RUN[id].stepAt(t) / N * 100, 0)}%)`).join("<br>")); });
+  hit.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("visibility", "hidden"); });
+})();
+/* loss + pace by step */
+const stepCharts = [];
+function stepChart(sel, H, y0, y1, yt, yf, draw, tipf) {
+  const svg = $(sel), f = frame(svg, W, H, M, 0, N, y0, y1, yt, XT, yf, v => fmt(v, 0));
+  IDS.forEach(id => { const name = sel.slice(1) + id, cr = mkClip(svg, name, H); clips.push({ rect: cr, kind: "step", id, f }); const g = el("g", { "clip-path": `url(#${name})` }); svg.append(g); draw(id, g, f); });
+  const cross = crossLine(svg, H), hit = el("rect", { x: M.l, y: 0, width: W - M.l - M.r, height: H, fill: "transparent" }); svg.append(hit);
+  stepCharts.push({ cross, f });
+  hit.addEventListener("mousemove", e => { const b = svg.getBoundingClientRect(), sx = (e.clientX - b.left) / b.width * W, s = Math.max(1, Math.min(N, Math.round((sx - M.l) / (W - M.l - M.r) * N))); stepCharts.forEach(c => { c.cross.setAttribute("x1", c.f.X(s)); c.cross.setAttribute("x2", c.f.X(s)); c.cross.setAttribute("visibility", "visible"); }); showTip(e, `<b>Step ${fmt(s, 0)}</b><br>` + IDS.map(id => tipf(id, s)).join("<br>")); });
+  hit.addEventListener("mouseleave", () => { hideTip(); stepCharts.forEach(c => c.cross.setAttribute("visibility", "hidden")); });
+}
+const allLoss = IDS.flatMap(id => [...RUN[id].ema.slice(2).map(p => p.v), ...RUN[id].dev.map(p => p.v)]);
+const lo = Math.floor(Math.min(...allLoss) * 100) / 100, hi = Math.ceil(Math.max(...allLoss) * 100) / 100;
+stepChart("#lossChart", 280, lo, hi, ticks(lo, hi, Math.round((hi - lo) * 100)), v => fmt(v, 2), (id, g, f) => {
+  const r = RUN[id]; g.append(el("path", { d: pathOf(r.ema.map(p => [p.s, Math.min(p.v, hi)]), f.X, f.Y), fill: "none", stroke: COL[id], "stroke-width": 2, "stroke-linejoin": "round" }));
+  r.dev.forEach(p => g.append(el("circle", { cx: f.X(p.s), cy: f.Y(p.v), r: 4.5, fill: "var(--surface)", stroke: COL[id], "stroke-width": 2 })));
+}, (id, s) => { const r = RUN[id], i = r.at(s), d = r.dev.filter(p => p.s <= s).pop(); return `${r.name}: train ${fmt(r.ema[i].v, 4)}${d ? `, dev ${fmt(d.v, 4)} (step ${d.s})` : ""}`; });
+const pmax = Math.ceil(Math.max(...IDS.flatMap(id => RUN[id].pace.map(p => p.v))) / 5) * 5;
+stepChart("#paceChart", 200, 0, pmax, ticks(0, pmax, pmax / 5), v => fmt(v, 0) + " s", (id, g, f) => g.append(el("path", { d: pathOf(RUN[id].pace.map(p => [p.s, p.v]), f.X, f.Y), fill: "none", stroke: COL[id], "stroke-width": 2, "stroke-linejoin": "round" })),
+  (id, s) => { const r = RUN[id], p = r.pace.filter(q => q.s <= s).pop(); return `${r.name}: ${p ? fmt(p.v, 1) + " s per step" : "warming up"}`; });
+$("#lossChart").append(el("text", { x: W - M.r + 8, y: 20 }, "hollow = dev"));
+
+/* race lanes + replay */
+$("#race").innerHTML = IDS.map(id => `<div class="lane"><h3>${dot(id)}${RUN[id].name}<span class="done" id="dn_${id}"></span></h3><div class="bar"><i id="bar_${id}" style="background:${COL[id]}"></i></div><dl><div><dt>Step</dt><dd id="st_${id}"></dd></div><div><dt>Train loss</dt><dd id="ls_${id}"></dd></div><div><dt>Seconds per step</dt><dd id="pc_${id}"></dd></div></dl></div>`).join("");
+let cur = TMAX, playing = false, last = 0;
+function draw(t) {
+  cur = Math.max(0, Math.min(TMAX, t));
+  clips.forEach(c => { const x = c.kind === "time" ? c.f.X(cur) : c.f.X(RUN[c.id].stepAt(cur)); c.rect.setAttribute("width", Math.max(0, x - M.l + 7)); });
+  IDS.forEach(id => { const r = RUN[id], s = r.stepAt(cur), i = r.at(s), p = r.pace.filter(q => q.s <= s).pop();
+    $("#bar_" + id).style.width = (s / N * 100) + "%"; $("#st_" + id).textContent = `${fmt(Math.floor(s), 0)} / ${fmt(N, 0)}`;
+    $("#ls_" + id).textContent = s < 1 ? "-" : fmt(r.ema[i].v, 4); $("#pc_" + id).textContent = p ? fmt(p.v, 1) : "-";
+    $("#dn_" + id).textContent = cur >= r.total_s ? `finished at ${hm(r.total_s)}` : ""; });
+  $("#clock").textContent = hm(cur) + " of training"; $("#scrub").value = Math.round(cur / TMAX * 1000);
+}
+function tick(now) { if (!playing) return; const dt = Math.min(100, now - last); last = now; draw(cur + dt / 1000 * (TMAX / 26) * +$("#speed").value); if (cur >= TMAX) { playing = false; $("#play").textContent = "Replay"; return; } requestAnimationFrame(tick); }
+function play() { if (cur >= TMAX) cur = 0; playing = true; $("#play").textContent = "Pause"; last = performance.now(); requestAnimationFrame(tick); }
+$("#play").onclick = () => { if (playing) { playing = false; $("#play").textContent = "Play"; } else play(); };
+$("#restart").onclick = () => { draw(0); play(); };
+$("#scrub").oninput = e => { playing = false; $("#play").textContent = "Play"; draw(+e.target.value / 1000 * TMAX); };
+draw(TMAX);
+if (!matchMedia("(prefers-reduced-motion: reduce)").matches) { draw(0); setTimeout(play, 600); }
+
+/* ---------- time taken ---------- */
+(function () {
+  const svg = $("#wallChart"), Wd = 480, m = { l: 64, r: 16 }, mx = Math.ceil(Math.max(...IDS.map(id => RUN[id].wall_h))), X = v => m.l + v / mx * (Wd - m.l - m.r);
+  ticks(0, mx, mx / 2).forEach(v => { svg.append(el("line", { x1: X(v), x2: X(v), y1: 8, y2: 132, stroke: "var(--grid)" })); svg.append(el("text", { x: X(v), y: 150, "text-anchor": "middle" }, fmt(v, 0) + " h")); });
+  const NAME = { training: "Training", startup: "Startup (load and tokenize)", queue: "Waiting in the queue" };
+  IDS.forEach((id, i) => { const y = 22 + i * 58; let t = 0; svg.append(el("text", { x: m.l - 10, y: y + 19, "text-anchor": "end", class: "lab" }, RUN[id].name));
+    RUN[id].segments.forEach(([k, min]) => { const x0 = X(t / 60), x1 = X((t + min) / 60), w = Math.max(1, x1 - x0 - 2); const r = el("rect", { x: x0, y, width: w, height: 28, rx: 3, fill: k === "queue" ? "var(--wait)" : COL[id], opacity: k === "startup" ? .45 : 1 }); svg.append(r); hover(r, `<b>${RUN[id].name}: ${NAME[k]}</b><br>${min >= 60 ? fmt(min / 60, 1) + " h" : fmt(min, min % 1 ? 1 : 0) + " min"}`); if (w > 70) svg.append(el("text", { x: x0 + w / 2, y: y + 18, "text-anchor": "middle", style: `fill:${k === "queue" ? "var(--text)" : "#fff"}` }, k === "queue" ? "queue " + fmt(min / 60, 0) + " h" : fmt(min / 60, 1) + " h")); t += min; });
+    svg.append(el("text", { x: Math.min(X(t / 60) + 6, Wd - 4), y: y - 5, "text-anchor": X(t / 60) + 6 > Wd - 60 ? "end" : "start", class: "lab" }, fmt(RUN[id].wall_h, 1) + " h total")); });
+})();
+(function () {
+  const svg = $("#gpuChart"), Wd = 480, m = { l: 64, r: 150 }, mx = Math.ceil(Math.max(...IDS.map(id => RUN[id].gpu_h)) / 50) * 50, X = v => m.l + v / mx * (Wd - m.l - m.r);
+  ticks(0, mx, mx / 50).forEach(v => { svg.append(el("line", { x1: X(v), x2: X(v), y1: 6, y2: 112, stroke: "var(--grid)" })); svg.append(el("text", { x: X(v), y: 130, "text-anchor": "middle" }, fmt(v, 0))); });
+  IDS.forEach((id, i) => { const y = 18 + i * 48, w = X(RUN[id].gpu_h) - m.l; svg.append(el("text", { x: m.l - 10, y: y + 19, "text-anchor": "end", class: "lab" }, RUN[id].name)); const r = el("path", { d: `M${m.l} ${y}h${w - 4}a4 4 0 0 1 4 4v20a4 4 0 0 1 -4 4h${-(w - 4)}z`, fill: COL[id] }); svg.append(r); svg.append(el("text", { x: m.l + w + 8, y: y + 19, class: "lab" }, `${fmt(RUN[id].gpu_h, 0)} GPU-h (${fmt(RUN[id].train_h, 2)} h)`)); hover(r, `<b>${RUN[id].name}</b><br>${fmt(RUN[id].train_h, 2)} h of training x 32 GPUs<br>First 272 steps: ${fmt(RUN[id].early_pace, 1)} s per step<br>Rest: ${fmt(RUN[id].late_pace, 1)} s per step`); });
+})();
+
+/* ---------- before / after ---------- */
+function dumbbell(sel, val, x0, x1, xt, lab, tipf) {
+  const svg = $(sel), Wd = 480, H = 330, m = { l: 132, r: 18, t: 6, b: 26 }, f = frame(svg, Wd, H, m, x0, x1, 0, 1, [], xt, v => v, v => fmt(v, 0));
+  xt.forEach(v => svg.insertBefore(el("line", { x1: f.X(v), x2: f.X(v), y1: m.t, y2: H - m.b, stroke: "var(--grid)" }), svg.firstChild));
+  const gh = (H - m.t - m.b) / TYPES.length;
+  TYPES.forEach((t, gi) => { svg.append(el("text", { x: 4, y: m.t + gi * gh + gh / 2 + 4, class: "lab", style: "font-weight:600" }, LABEL[t]));
+    IDS.forEach((id, k) => { const y = m.t + gi * gh + gh / 2 + (k ? 13 : -13), b = val(id, "base", t), a = val(id, "ft", t), xb = f.X(b), xa = f.X(a);
+      svg.append(el("text", { x: m.l - 10, y: y + 4, "text-anchor": "end" }, RUN[id].name));
+      svg.append(el("line", { x1: xb, x2: xa, y1: y, y2: y, stroke: COL[id], "stroke-width": 2, opacity: .55 }));
+      const c1 = el("circle", { cx: xb, cy: y, r: 6, fill: "var(--surface)", stroke: COL[id], "stroke-width": 2.5 }), c2 = el("circle", { cx: xa, cy: y, r: 6.5, fill: COL[id], stroke: "var(--surface)", "stroke-width": 2 }); svg.append(c1, c2);
+      hover(c1, tipf(id, "base", t)); hover(c2, tipf(id, "ft", t));
+      const right = Math.max(xa, xb), left = Math.min(xa, xb), txt = lab(b, a), room = right + 10 + txt.length * 6.4 < Wd; svg.append(el("text", { x: room ? right + 10 : left - 10, y: y + 4, "text-anchor": room ? "start" : "end", class: "lab" }, txt)); });
+    if (gi) svg.append(el("line", { x1: 0, x2: Wd, y1: m.t + gi * gh, y2: m.t + gi * gh, stroke: "var(--grid)" })); });
+}
+const evTip = (id, m, t) => { const d = RUN[id].eval[m][t]; return `<b>${RUN[id].name}, ${m === "base" ? "base model" : "fine-tuned"} - ${LABEL[t]}</b><br>Accuracy ${pct(d.accuracy)}<br>Mean tokens ${fmt(d.mean_tokens, 0)}<br>Cut off at the cap ${pct(d.truncated_rate)}<br>${fmt(d.samples, 0)} samples`; };
+const accs = IDS.flatMap(id => TYPES.flatMap(t => [acc(id, "base", t), acc(id, "ft", t)])), a0 = Math.floor((Math.min(...accs) - 1.5) / 2) * 2; $("#accMin").textContent = a0;
+dumbbell("#accChart", acc, a0, 100, ticks(a0, 100, (100 - a0) / 2), (b, a) => `${fmt(b, 1)} to ${fmt(a, 1)} (${sign(a - b, 1)})`, evTip);
+const tmax = Math.ceil(Math.max(...IDS.flatMap(id => TYPES.map(t => tok(id, "base", t)))) / 250) * 250;
+dumbbell("#tokChart", tok, 0, tmax, ticks(0, tmax, tmax / 250), (b, a) => `${fmt(b, 0)} to ${fmt(a, 0)} (${sign((a / b - 1) * 100, 0)}%)`, evTip);
+
+let histMode = "ft";
+function hist() {
+  const svg = $("#histChart"); svg.replaceChildren(); const Wd = 480, H = 250, m = { l: 44, r: 12, t: 10, b: 40 }, E = RUN.hecate.eval.hist.edges, n = E.length - 1;
+  const share = id => { const h = RUN[id].eval.hist[histMode], s = h.reduce((a, b) => a + b, 0); return h.map(v => v / s * 100); }, S = { hecate: share("hecate"), rhea: share("rhea") };
+  const allmax = Math.max(...IDS.flatMap(id => ["base", "ft"].flatMap(k => { const h = RUN[id].eval.hist[k], s = h.reduce((a, b) => a + b, 0); return h.map(v => v / s * 100); }))), top = Math.ceil(allmax / 5) * 5;
+  const f = frame(svg, Wd, H, m, 0, n, 0, top, ticks(0, top, top / 5), [], v => fmt(v, 0) + "%", v => v), bw = (Wd - m.l - m.r) / n;
+  for (let i = 0; i < n; i++) { const lab = i === n - 1 ? E[i] + "+" : E[i] + "-" + E[i + 1];
+    IDS.forEach((id, k) => { const v = S[id][i], w = (bw - 6) / 2 - 1, x = m.l + i * bw + 3 + k * (w + 2), y = f.Y(v), h = H - m.b - y; if (v > 0) { const r = el("path", { d: h > 4 ? `M${x} ${H - m.b}v${-(h - 3)}a3 3 0 0 1 3 -3h${w - 6}a3 3 0 0 1 3 3v${h - 3}z` : `M${x} ${H - m.b}v${-h}h${w}v${h}z`, fill: COL[id] }); svg.append(r); hover(r, `<b>${RUN[id].name}, ${histMode === "base" ? "base model" : "fine-tuned"}</b><br>${lab} tokens: ${fmt(v, 1)}% of samples (${fmt(RUN[id].eval.hist[histMode][i], 0)})`); } });
+    svg.append(el("text", { x: m.l + (i + .5) * bw, y: H - m.b + 12, "text-anchor": "end", transform: `rotate(-35 ${m.l + (i + .5) * bw} ${H - m.b + 12})` }, lab)); }
+}
+[["#hBase", "base"], ["#hFt", "ft"]].forEach(([s, k]) => $(s).onclick = () => { histMode = k; $("#hBase").setAttribute("aria-pressed", k === "base"); $("#hFt").setAttribute("aria-pressed", k === "ft"); hist(); });
+hist();
+(function () {
+  const svg = $("#chgChart"), Wd = 480, m = { l: 150, r: 60 }, rows = [["More samples right", "better"], ["Fewer samples right", "worse"]], mx = Math.max(...IDS.flatMap(id => rows.map(r => RUN[id].eval.questions_changed[r[1]]))), X = v => v / mx * (Wd - m.l - m.r);
+  rows.forEach(([n, key], gi) => { svg.append(el("text", { x: 4, y: 40 + gi * 84, class: "lab", style: "font-weight:600" }, n));
+    IDS.forEach((id, k) => { const y = 14 + gi * 84 + k * 28, v = RUN[id].eval.questions_changed[key], w = Math.max(6, X(v)); svg.append(el("text", { x: m.l - 10, y: y + 15, "text-anchor": "end" }, RUN[id].name)); const r = el("path", { d: `M${m.l} ${y}h${w - 4}a4 4 0 0 1 4 4v14a4 4 0 0 1 -4 4h${-(w - 4)}z`, fill: COL[id] }); svg.append(r); svg.append(el("text", { x: m.l + w + 8, y: y + 15, class: "lab" }, `${v}`)); hover(r, `<b>${RUN[id].name}</b><br>${v} of 600 questions: ${n.toLowerCase()} after fine-tuning<br>${RUN[id].eval.questions_changed.same} unchanged`); }); });
+  svg.append(el("text", { x: 4, y: 200 }, IDS.map(id => `${RUN[id].name}: ${RUN[id].eval.questions_changed.same} of 600 unchanged`).join("    ")));
+})();
+(function () {
+  const cols = [["Accuracy", d => pct(d.accuracy)], [`Any of ${K} right`, d => pct(d["pass@" + K])], ["Mean tokens", d => fmt(d.mean_tokens, 0)], ["Cut off", d => pct(d.truncated_rate)]];
+  let h = "<tr><th>Question type</th><th class='l'>Cluster</th><th class='l'>Model</th>" + cols.map(c => `<th>${c[0]}</th>`).join("") + "<th>Samples</th></tr>";
+  TYPES.forEach(t => IDS.forEach(id => [["Base", "base"], ["Fine-tuned", "ft"]].forEach(([n, k]) => { const d = RUN[id].eval[k][t]; h += `<tr><td>${LABEL[t]}</td><td class="l">${RUN[id].name}</td><td class="l">${n}</td>${cols.map(c => `<td>${c[1](d)}</td>`).join("")}<td>${fmt(d.samples, 0)}</td></tr>`; })));
+  $("#evalTable").innerHTML = h;
+  $("#cfg").innerHTML = "<tr><th></th><th class='l'>Hecate</th><th class='l'>Rhea</th></tr>" + D.config.map(r => `<tr class="${r[3] ? "" : "diff"}"><td>${r[0]}</td><td class="l">${r[1]}</td><td class="l">${r[2]}</td></tr>`).join("");
+})();
+</script>
+</body>
+</html>

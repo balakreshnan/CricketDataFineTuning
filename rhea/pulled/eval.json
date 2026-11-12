@@ -1,0 +1,177 @@
+{
+ "base": {
+  "run_rate": {
+   "questions": 200,
+   "samples": 800,
+   "accuracy": 0.9875,
+   "pass@4": 1.0,
+   "mean_tokens": 394.04875,
+   "mean_tokens_correct": 389.1860759493671,
+   "truncated_rate": 0.00125,
+   "no_answer_rate": 0.0
+  },
+  "chase_rate": {
+   "questions": 200,
+   "samples": 800,
+   "accuracy": 0.93625,
+   "pass@4": 1.0,
+   "mean_tokens": 950.085,
+   "mean_tokens_correct": 935.7409879839786,
+   "truncated_rate": 0.01,
+   "no_answer_rate": 0.0
+  },
+  "milestone": {
+   "questions": 200,
+   "samples": 800,
+   "accuracy": 0.98625,
+   "pass@4": 1.0,
+   "mean_tokens": 858.23625,
+   "mean_tokens_correct": 813.0963244613434,
+   "truncated_rate": 0.01375,
+   "no_answer_rate": 0.0
+  },
+  "overall": {
+   "questions": 600,
+   "samples": 2400,
+   "accuracy": 0.97,
+   "pass@4": 1.0,
+   "mean_tokens": 734.1233333333333,
+   "mean_tokens_correct": 708.7027491408935,
+   "truncated_rate": 0.008333333333333333,
+   "no_answer_rate": 0.0
+  },
+  "_wall_s": 1.6276159286499023
+ },
+ "ft": {
+  "run_rate": {
+   "questions": 200,
+   "samples": 800,
+   "accuracy": 0.98625,
+   "pass@4": 1.0,
+   "mean_tokens": 268.02125,
+   "mean_tokens_correct": 268.3688212927757,
+   "truncated_rate": 0.0,
+   "no_answer_rate": 0.0
+  },
+  "chase_rate": {
+   "questions": 200,
+   "samples": 800,
+   "accuracy": 0.9525,
+   "pass@4": 1.0,
+   "mean_tokens": 582.88875,
+   "mean_tokens_correct": 589.1587926509186,
+   "truncated_rate": 0.0,
+   "no_answer_rate": 0.0
+  },
+  "milestone": {
+   "questions": 200,
+   "samples": 800,
+   "accuracy": 0.99875,
+   "pass@4": 1.0,
+   "mean_tokens": 513.36375,
+   "mean_tokens_correct": 513.4167709637046,
+   "truncated_rate": 0.0,
+   "no_answer_rate": 0.0
+  },
+  "overall": {
+   "questions": 600,
+   "samples": 2400,
+   "accuracy": 0.9791666666666666,
+   "pass@4": 1.0,
+   "mean_tokens": 454.7579166666667,
+   "mean_tokens_correct": 455.70297872340427,
+   "truncated_rate": 0.0,
+   "no_answer_rate": 0.0
+  },
+  "_wall_s": 1387.0431094169617
+ },
+ "n_base": 2400,
+ "n_ft": 2400,
+ "hist": {
+  "edges": [
+   0,
+   200,
+   300,
+   400,
+   500,
+   600,
+   800,
+   1000,
+   1500,
+   2000,
+   3000,
+   4096
+  ],
+  "base": [
+   46,
+   232,
+   354,
+   362,
+   324,
+   410,
+   221,
+   272,
+   77,
+   69,
+   33
+  ],
+  "ft": [
+   166,
+   485,
+   547,
+   428,
+   350,
+   259,
+   81,
+   65,
+   9,
+   9,
+   1
+  ]
+ },
+ "pairs": {
+  "both": 2284,
+  "fixed": 66,
+  "broken": 44,
+  "neither": 6
+ },
+ "ci": [
+  0.08333333333333334,
+  1.7916666666666667
+ ],
+ "questions_changed": {
+  "better": 49,
+  "worse": 35,
+  "same": 516
+ },
+ "tokens_p": {
+  "base": {
+   "50": 563,
+   "90": 1348,
+   "99": 3608
+  },
+  "ft": {
+   "50": 400,
+   "90": 720,
+   "99": 1410
+  }
+ },
+ "example": {
+  "qtype": "milestone",
+  "gold": 15,
+  "question": "T20 International: Botswana v Kenya at Gymkhana Club Ground, 2023-06-19.\nBotswana are batting first. After 14.2 overs (cricket notation: overs.balls) they are 93/3. Ameer Saiyed is on 35 off 33 balls and R Nehonde is on 3 off 3. Vraj Patel bowled the last delivery.\n\nAmeer Saiyed wants to reach 50 runs. If Ameer Saiyed keeps scoring at their own current strike rate (their runs per ball faced so far), how many more balls must Ameer Saiyed face to reach 50? Round up to a whole number of balls.",
+  "base": {
+   "text": "We need answer cricket calculation. Need think step by step. User: T20 Botswana v Kenya, Botswana batting first. After 14.2 overs (cricket notation: overs.balls) they are 93/3. Ameer Saiyed on 35 off 33 balls and R Nehonde on 3 off 3. Vraj Patel bowled last delivery. Ameer wants 50. If keeps scoring at their own current strike rate (their runs per ball faced so far), how many more balls must face to reach 50? Round up whole balls.\n\nNeed interpret: current strike rate = runs / balls faced so far. Ameer Saiyed 35 off 33 -> strike rate = 35/33 runs per ball. Needs 15 more runs to reach 50. Balls required = 15 / (35/33) = 15*33/35 = 495/35 = 14.142857... round up = 15 balls.\n\nBut check: \"their own current strike rate (their runs per ball faced so far)\" maybe strike rate as runs per 100 balls? But says runs per ball faced so far, so yes.\n\nNeed ensure no off-by-one? He has scored 35 off 33. If continue at that rate, after x more balls expected additional runs = (35/33)x. Need at least 15. x >= 15/(35/33) = 14.142 -> 15 balls. Could ask \"how many more balls must Ameer face to reach 50\" If exactly current strike rate deterministic average; round up. 15.\n\nNeed produce final line: Final answer: 15. Could include step-by-step. Ensure no hidden context about overs? 14.2 overs irrelevant? Maybe to confirm balls remaining? no.\n\nDouble-check if \"their own current strike rate\" could mean team's current strike rate? It says their runs per ball faced so far, \"their own\" refers Ameer's. If team's strike rate after 14.2 overs: total balls = 14*6 + 2 = 86 balls, 93 runs, rate = 93/86 per ball; needs 15 -> 15*86/93=13.87 ->14. But phrase \"their own current strike rate (their runs per ball faced so far)\" likely individual. It explicitly says Ameer Saiyed wants... If Ameer keeps scoring at their own current strike rate (their runs per ball faced so far). The pronoun \"their own\" could be Ameer's. The data includes Ameer 35 off 33 and Nehonde 3 off 3, and last bowler. Need use 35/33. The team score included maybe distractor or context. Let's parse: \"Ameer Saiyed is on 35 off 33 balls and R Nehonde is on 3 off 3. Vraj Patel bowled the last delivery.\n\nAmeer Saiyed wants to reach 50 runs. If Ameer Saiyed keeps scoring at their own current strike rate (their runs per ball faced so far), how many more balls must Ameer Saiyed face to reach 50?\" Yes individual.\n\nNeed maybe include calculation with 50-35=15. 35/33 = 1.0606. 15/1.0606=14.142. Round up 15.\n\nFinal answer own line.\n</think>\n\nAmeer Saiyed needs 50 \u2212 35 = 15 more runs.\n\nCurrent strike rate = 35 runs / 33 balls = 35/33 runs per ball.\n\nBalls needed = 15 \u00f7 (35/33) = 15 \u00d7 33 / 35 = 14.14...\n\nRounding up, he must face 15 more balls.\n\nFinal answer: 15",
+   "n_tokens": 895,
+   "pred": 15.0,
+   "correct": true
+  },
+  "ft": {
+   "text": "We need answer cricket calculation. Need think step by step. User: T20 Botswana v Kenya, Botswana batting first. After 14.2 overs (cricket notation: overs.balls) they are 93/3. Ameer Saiyed on 35 off 33 balls and R Nehonde on 3 off 3. Vraj Patel bowled last delivery. Ameer wants 50. If keeps scoring at their own current strike rate (runs per ball faced so far), how many more balls must Ameer face to reach 50? Round up whole balls.\n\nNeed compute current SR = 35/33 runs per ball. Need additional runs to 50 = 15. Balls needed = 15 / (35/33) = 15*33/35 = 495/35 = 14.142857... round up = 15 balls. But check: Does \"more balls must Ameer face to reach 50\" with current strike rate. Yes 15 balls. Need final answer line. But maybe trick about current score? 93/3 after 14.2 overs, Ameer 35*? They want own SR. 35/33. 15 runs at 35/33 per ball. 14 balls would yield 14*35/33 = 490/33 = 14.848 < 15. 15 balls yields 525/33 = 15.909, enough. So 15.\n\nNeed provide concise explanation maybe. Ensure final answer: 15.\n</think>\n\nAmeer Saiyed\u2019s current strike rate is:\n\n35 runs \u00f7 33 balls = 35/33 runs per ball.\n\nRuns still needed to reach 50:\n\n50 \u2212 35 = 15 runs.\n\nBalls needed at that strike rate:\n\n15 \u00f7 (35/33) = 15 \u00d7 33/35 = 495/35 \u2248 14.14 balls.\n\nRounding up to a whole number of balls gives 15 balls.\n\nFinal answer: 15",
+   "n_tokens": 500,
+   "pred": 15.0,
+   "correct": true
+  },
+  "why": "Picked automatically: sample 0 of a question both models answered correctly, at the 75th percentile of token savings among base answers of 500 to 1,200 tokens."
+ }
+}
