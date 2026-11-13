@@ -1,6 +1,6 @@
 # Cluster runs tracker
 
-Last updated 2026-11-12. Rhea entries come from this week's job records. Hecate, EOS and Ptyche entries come from the
+Last updated 2026-11-13. Rhea entries come from this week's job records. Hecate, EOS and Ptyche entries come from the
 notes and READMEs written when those runs finished (October 2026) and were not re-checked on the clusters today.
 
 ## Clusters
@@ -27,6 +27,7 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | 7 | 2026-10-09 | Ptyche | Olympics full SFT | Nemotron-3.5-Lightning-30B-A3B | Full fine-tune, 789 steps | 4 nodes (16 GB200), 52 min | Row benchmark 92.00% to 92.35%; table benchmark 93.98% to 93.05%; tokens 2,209 to 1,951 | Done |
 | 8 | 2026-11-11 | Rhea | Cricket LoRA on the 500K dataset | Qwen3.8-27B | LoRA r32, 1 epoch, lr 1e-4 | 32 GPUs, 4.5 h training in 1 allocation (4.7 h total) | Accuracy 97.00% to 97.92%; tokens 734 to 455 (-38%); truncation 0.83% to 0 | Done |
 | 9 | 2026-11-12 | Rhea | Speculative decoding with Dynamo + SGLang | Qwen3.8-27B | Probe of public Dynamo SGLang 1.5.1 image | 1 node, 5 short jobs | No server started: image has no GPU kernels for Vera Rubin. No speed numbers | Stopped, cleaned up |
+| 10 | 2026-11-13 | Rhea | Cricket RLVR (reward = exact answer, short-answer bonus) | Qwen3.8-27B | LoRA r32 from base, group-baseline policy gradient, 100 steps, 102,400 rollouts | 32 GPUs, 1.33 h training (jobs 39000, 39066, 39067) | Accuracy 97.00% to 99.17%; tokens 734 to 109 (-85%); truncation 0.83% to 0 | Done |
 
 ## Rhea job log
 
@@ -61,6 +62,7 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | `Olympics-Reasoning-Nemotron-3.5-Lightning` | Dataset | Project 6 | Public |
 | `Nemotron-3.5-Lightning-30B-A3B-Olympics-Reasoning` | Full model | Project 7 | Private |
 | `Qwen3.8-27B-Cricket-Reasoning-Rhea-LoRA` | Adapter | Project 8 | Private |
+| `Qwen3.8-27B-Cricket-Reasoning-RLVR` | Adapter | Project 10 | Private |
 
 ## Reports and runbooks
 
@@ -82,4 +84,5 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | `models/Qwen3.8-27B` | 52 GB |
 | `datasets/CricketData-T20-Reasoning-Qwen3.8-Full` | 2.1 GB |
 | `cricket-rhea/runs/cricket-lora-full-1111` (adapter, 3 checkpoints, benchmark records) | not measured |
+| `cricket-rhea/runs/cricket-rlvr-1113` (RLVR adapter 870 MB, checkpoints, benchmark records) | not measured |
 | `cache/enroot-cache` (PyTorch image layers) | 20 GB |
