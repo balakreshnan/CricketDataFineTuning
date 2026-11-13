@@ -70,6 +70,7 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 |---|---|
 | Rhea run report (interactive) | `rhea/cricket-lora-report.html` |
 | Hecate vs Rhea comparison (interactive) | `rhea/hecate-vs-rhea-report.html` |
+| Rhea RLVR run and GPU usage report (interactive) | `rhea/cricket-rlvr-report.html` |
 | Rhea runbook | `rhea/README.md` |
 | Hecate cricket runbook | `cricket/README.md` |
 | FinNews experiment table | `pulled/experiments_summary.md` |
