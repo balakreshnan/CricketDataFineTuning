@@ -36,5 +36,6 @@ case "$stage" in
   rlvr-smoke) sbatch "${common[@]}" -N 1 -t 00:40:00 -J general_sa-cricket-rhea.rlvr-smoke --export=ALL,CODE_DIR="$here",GPUS_PER_NODE="$GPUS_PER_NODE",RUN_NAME="rlvr-smoke-$(date +%m%d%H%M)",ARGS="--steps 3 --questions_per_gpu 2 --group 4 --save_steps 2 --warmup_steps 1 $extra" "$here/rlvr.sbatch";;
   rlvr)  sbatch "${common[@]}" -N "$nodes" -t "$tlim" -J "general_sa-cricket-rhea.$name" --export=ALL,CODE_DIR="$here",GPUS_PER_NODE="$GPUS_PER_NODE",RUN_NAME="$name",ARGS="$extra" "$here/rlvr.sbatch";;
   rlvr-finish) sbatch "${common[@]}" -N 1 -t 00:20:00 -J general_sa-cricket-rhea.rlvr-finish --export=ALL,CODE_DIR="$here",RUN_NAME="$name",ARGS="$extra" "$here/rlvr_finish.sbatch";;
+  gpu-usage) sbatch "${common[@]}" -N 1 -t 00:10:00 -J general_sa-cricket-rhea.gpu-usage --export=ALL,CODE_DIR="$here",RUN_NAME="$name" "$here/gpu_usage.sbatch";;
   *) echo "unknown stage $stage" >&2; exit 2;;
 esac
