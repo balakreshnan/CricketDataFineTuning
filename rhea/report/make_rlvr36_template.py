@@ -14,12 +14,12 @@ def rep(a, b, n=1):
 
 
 # ---- static HTML ----
-rep("<title>Cricket RLVR Run Report</title>", "<title>Qwen3.6 RLVR Run Report</title>")
+rep("<title>Cricket RLVR Run Report</title>", "<title>__TITLE__</title>")
 rep("<h1>RLVR on 32 Vera Rubin GPUs: what the run did and how well the GPUs were used</h1>",
-    "<h1>Qwen3.6-35B-A3B with RLVR: before and after, and how the 32 GPUs were used</h1>")
+    "<h1>__H1__</h1>")
 rep('''<p class="sub">Qwen3.8-27B was trained with reinforcement learning with verifiable rewards on T20 cricket questions (Rhea job 39000, 13 Nov 2026). The model answered questions itself and was rewarded only for a correct final number, with a small bonus for shorter answers.</p>''',
-    '''<p class="sub">Qwen3.6-35B-A3B, a mixture-of-experts model, was trained with reinforcement learning with verifiable rewards on T20 cricket questions (Rhea job 40421, 13 Nov 2026). The model answered questions itself and was rewarded only for a correct final number, with a bonus for shorter answers.</p>''')
-rep('max="100" step="1" value="100"', 'max="60" step="1" value="60"')
+    '''<p class="sub">__SUB__</p>''')
+rep('max="100" step="1" value="100"', 'max="__N__" step="1" value="__N__"')
 rep('''<p class="sub">Accuracy and length are measured on the training rollouts, which are capped at 1,024 tokens. They are not benchmark numbers.</p>''',
     '''<p class="sub">Accuracy and length are measured on the training rollouts, on training questions with plain temperature-1 sampling. They are not benchmark numbers.</p>''')
 rep('''<select id="gsel"><option value="-1" selected>Average of the 4 GPUs</option><option value="0">GPU 0</option><option value="1">GPU 1</option><option value="2">GPU 2</option><option value="3">GPU 3</option></select>''',
@@ -33,8 +33,8 @@ rep('''<h2>What the model learned, step by step</h2>''',
 
 <h2>What the model learned, step by step</h2>''')
 rep('''<details><summary>Per-step table</summary>''',
-    '''<h2>Compared with the Qwen3.8-27B run</h2>
-<p class="sub">Same dataset, same benchmark, same 32 GPUs. The two runs used different rollout caps and step counts, so read this as two recipes, not a controlled comparison.</p>
+    '''<h2>__CMP_H__</h2>
+<p class="sub">__CMP_SUB__</p>
 <div class="card"><div class="scroll"><table id="cmp"></table></div></div>
 
 <details><summary>Per-step table</summary>''')
@@ -85,18 +85,21 @@ verdict = r'''const lastRo = sum(S.slice(-10), s => s.ro) / 10, lastUp = sum(S.s
 const tokFloor = S.find(s => s.tok <= 1.25 * Math.min(...S.map(x => x.tok)));
 const afterFloor = tLoop - tokFloor.el, minAccAfter = Math.min(...S.filter(s => s.s > tokFloor.s).map(s => s.acc));
 const gpuHFloor = J.gpus * (tokFloor.el + tOther) / 3600, tokCut = 1 - F.overall.mean_tokens / B.overall.mean_tokens;
+const QT = TYPES.filter(([t]) => t !== "overall"), best = QT.slice().sort((x, y) => (F[y[0]].accuracy - B[y[0]].accuracy) - (F[x[0]].accuracy - B[x[0]].accuracy))[0];
+const memTight = Math.max(...G.mem_peak_gb) / J.gpu_gb > 0.95;
 $("#good").innerHTML = li([
   `<b>All ${J.gpus} GPUs worked on every step.</b> Rollouts and gradients both ran on every GPU in parallel, so each update saw ${fmt(perStep)} fresh answers.`,
   `<b>Load was even across GPUs.</b> Average utilisation per GPU ranged from ${fmt(G.util_gpu_min)}% to ${fmt(G.util_gpu_max)}%, measured on all ${J.gpus}.`,
-  `<b>Every question type ended at 97.8% or higher.</b> The biggest gain was on chase-rate questions: ${fmt(B.chase_rate.accuracy * 100, 2)}% to ${fmt(F.chase_rate.accuracy * 100, 2)}%.`,
+  `<b>Every question type ended at ${fmt(Math.floor(Math.min(...QT.map(([t]) => F[t].accuracy)) * 1000) / 10, 1)}% or higher.</b> The biggest gain was on ${best[1].toLowerCase()} questions: ${fmt(B[best[0]].accuracy * 100, 2)}% to ${fmt(F[best[0]].accuracy * 100, 2)}%.`,
+  ...(memTight ? [] : [`<b>The large memory was put to work.</b> Peak memory per node ranged from ${fmt(Math.min(...G.mem_peak_gb))} to ${fmt(Math.max(...G.mem_peak_gb))} GB of ${fmt(J.gpu_gb, 1)} GB on the fullest GPU.`]),
   `<b>Benchmark result.</b> Accuracy went from ${fmt(B.overall.accuracy * 100, 2)}% to ${fmt(F.overall.accuracy * 100, 2)}% (${sign(dAcc)} points), and answers became ${fmt(tokCut * 100)}% shorter (${fmt(B.overall.mean_tokens)} to ${fmt(F.overall.mean_tokens)} tokens).`]);
 const slipped = TYPES.filter(([t]) => t !== "overall" && F[t].accuracy < B[t].accuracy);
 $("#bad").innerHTML = li([
-  ...slipped.map(([t, name]) => `<b>${name} questions slipped.</b> Accuracy on them went from ${fmt(B[t].accuracy * 100, 2)}% to ${fmt(F[t].accuracy * 100, 2)}%, and ${fmt((1 - F[t]["pass@4"]) * F[t].questions)} of ${F[t].questions} are now wrong in all 4 samples (none before).`),
-  `<b>GPU memory was nearly exhausted.</b> Every node had a GPU peak between ${fmt(Math.min(...G.mem_peak_gb))} and ${fmt(Math.max(...G.mem_peak_gb))} GB of ${fmt(J.gpu_gb, 1)} GB, during the long-answer steps at the start. The run did not fail, but it had almost no headroom.`,
+  ...slipped.map(([t, name]) => `<b>${name} questions slipped.</b> Accuracy on them went from ${fmt(B[t].accuracy * 100, 2)}% to ${fmt(F[t].accuracy * 100, 2)}%, and ${fmt((1 - F[t]["pass@4"]) * F[t].questions)} of ${F[t].questions} are wrong in all 4 samples (${fmt((1 - B[t]["pass@4"]) * B[t].questions)} before).`),
+  ...(!memTight ? [] : [`<b>GPU memory was nearly exhausted.</b> Every node had a GPU peak between ${fmt(Math.min(...G.mem_peak_gb))} and ${fmt(Math.max(...G.mem_peak_gb))} GB of ${fmt(J.gpu_gb, 1)} GB, during the long-answer steps at the start. The run did not fail, but it had almost no headroom.`]),
   `<b>The first step was very slow.</b> Step 1 took ${fmt(S[0].st / 60)} minutes, ${fmt(S[0].ro / 60)} of them in rollouts: answers averaged ${fmt(S[0].tok)} tokens and the model's kernels were compiled for the first time.`,
   `<b>A large part of the run came after answers stopped getting shorter.</b> Rollout accuracy passed 98.5% at step ${conv.s} and answer length reached its floor around step ${tokFloor.s}. The ${N - tokFloor.s} steps after that took ${fmt(afterFloor / 60)} minutes (${pct(afterFloor / J.elapsed_s, 0)} of the job) with rollout accuracy at ${pct(minAccAfter)} or higher.`,
-  `<b>Updates dominated step time.</b> Updates took ${pct(tUpd / (tRoll + tUpd), 0)} of step time. In the last ten steps a rollout phase took about ${fmt(lastRo)} s and the update about ${fmt(lastUp)} s. The update batch was cut to ${A.train_batch} sequences to stay inside GPU memory, which makes it slow.`,
+  `<b>Updates dominated step time.</b> Updates took ${pct(tUpd / (tRoll + tUpd), 0)} of step time. In the last ten steps a rollout phase took about ${fmt(lastRo)} s and the update about ${fmt(lastUp)} s.${A.train_batch < 8 ? ` The update batch was cut to ${A.train_batch} sequences to stay inside GPU memory, which makes it slow.` : ""}`,
   `<b>The GPUs were not saturated.</b> Utilisation averaged ${fmt(utilAvg)}% across all ${J.gpus} GPUs (about ${fmt(G.util_rollout)}% in rollouts and ${fmt(G.util_update)}% in updates), and power averaged ${fmt(G.power_avg_w)} W against a ${fmt(G.power_peak_w)} W peak.`,
   `<b>A shorter run would likely have cost less.</b> Stopping at step ${tokFloor.s} would have used about ${fmt(gpuHFloor)} GPU-hours instead of ${fmt(gpuH)}.`]);
 $("#caveat").textContent = `Limits of this data: GPU readings are ${G.interval_s} s apart, so the rollout/update split of utilisation is approximate. Answers per minute come from step timings, not per-GPU logs. Only the final adapter was benchmarked, so the benchmark score at earlier steps is not known.`;
@@ -134,6 +137,7 @@ $("#caveat").textContent = `Limits of this data: GPU readings are ${G.interval_s
     row("Rollouts", fmt(P.rollouts), fmt(N * perStep)) +
     row("Rollout cap (tokens)", fmt(P.max_new_tokens), fmt(A.max_new_tokens)) +
     row("Trainable LoRA parameters", P.trainable, D.trainable) +
+    row("GPUs with usage readings", P.measured, `all ${J.gpus}`) + row("Average GPU utilisation", P.util + "%", fmt(utilAvg) + "%") + row("Peak GPU memory", fmt(P.mem_peak) + " GB", fmt(Math.max(...G.mem_peak_gb)) + " GB") +
     row("Training job time", fmt(P.elapsed_s / 60) + " min", fmt(J.elapsed_s / 60) + " min") +
     row("GPU-hours", fmt(P.elapsed_s * 32 / 3600, 1), fmt(gpuH, 1));
 })();
@@ -146,5 +150,5 @@ rep('''tile("Benchmark accuracy", `${fmt(B.overall.accuracy * 100, 2)}% <small>t
     '''tile("Benchmark accuracy", `${fmt(B.overall.accuracy * 100, 2)}% <small>to</small> ${fmt(F.overall.accuracy * 100, 2)}%`, `${sign(dAcc)} points on 600 held-out questions`)''')
 rep(" (process ${cell.idx})", "")
 rep(" (process ${g})", "", 2)
-(here / "rlvr36_template.html").write_text(s, encoding="utf-8", newline="\n")
-print("wrote rlvr36_template.html", len(s))
+(here / "rlvr_full_template.html").write_text(s, encoding="utf-8", newline="\n")
+print("wrote rlvr_full_template.html", len(s))

@@ -1,0 +1,43 @@
+{
+  "run_rate": {
+    "questions": 200,
+    "samples": 800,
+    "accuracy": 1.0,
+    "pass@4": 1.0,
+    "mean_tokens": 100.2475,
+    "mean_tokens_correct": 100.2475,
+    "truncated_rate": 0.0,
+    "no_answer_rate": 0.0
+  },
+  "chase_rate": {
+    "questions": 200,
+    "samples": 800,
+    "accuracy": 0.99875,
+    "pass@4": 1.0,
+    "mean_tokens": 156.15,
+    "mean_tokens_correct": 156.16520650813516,
+    "truncated_rate": 0.0,
+    "no_answer_rate": 0.0
+  },
+  "milestone": {
+    "questions": 200,
+    "samples": 800,
+    "accuracy": 1.0,
+    "pass@4": 1.0,
+    "mean_tokens": 99.76625,
+    "mean_tokens_correct": 99.76625,
+    "truncated_rate": 0.0,
+    "no_answer_rate": 0.0
+  },
+  "overall": {
+    "questions": 600,
+    "samples": 2400,
+    "accuracy": 0.9995833333333334,
+    "pass@4": 1.0,
+    "mean_tokens": 118.72125,
+    "mean_tokens_correct": 118.71071279699875,
+    "truncated_rate": 0.0,
+    "no_answer_rate": 0.0
+  },
+  "_wall_s": 139.00247931480408
+}
