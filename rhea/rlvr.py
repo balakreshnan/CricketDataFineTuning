@@ -34,7 +34,7 @@ import sampling  # noqa: E402
 RANK, LOCAL_RANK = int(os.environ.get("RANK", 0)), int(os.environ.get("LOCAL_RANK", 0))
 QTYPES = ["run_rate", "chase_rate", "milestone", "projection", "strike_rate", "legal_balls"]
 LORA_TARGETS = (r"model\.language_model\.layers\.\d+\."
-                r"(self_attn\.(q|k|v|o)_proj|linear_attn\.(in_proj_qkv|in_proj_z|out_proj)|mlp\.(gate|up|down)_proj)")
+                r"(self_attn\.(q|k|v|o)_proj|linear_attn\.(in_proj_qkv|in_proj_z|out_proj)|mlp\.(shared_expert\.)?(gate|up|down)_proj)")
 
 
 def log(m):

@@ -1,0 +1,41 @@
+{
+ "finished": true,
+ "steps": 60,
+ "world_size": 32,
+ "rollouts_total": 61440,
+ "first_steps": {
+  "rollout_accuracy": 0.9685546875,
+  "reward_mean": 0.823119821548462,
+  "mean_tokens": 1584.564453125,
+  "truncated_rate": 0.015234375
+ },
+ "last_steps": {
+  "rollout_accuracy": 0.9990234375,
+  "reward_mean": 0.9834555625915528,
+  "mean_tokens": 159.59794921875,
+  "truncated_rate": 0.0
+ },
+ "window": 10,
+ "train_hours": 2.6152930549780526,
+ "args": {
+  "model_dir": "/lustre/fsw/general_sa/bbalakreshna/models/Qwen3.6-35B-A3B",
+  "data_dir": "/lustre/fsw/general_sa/bbalakreshna/datasets/CricketData-T20-Reasoning-Qwen3.8-Full",
+  "out_dir": "/lustre/fsw/general_sa/bbalakreshna/cricket-rhea/runs/qwen36-rlvr-1113",
+  "run_name": "qwen36-rlvr-1113",
+  "steps": 60,
+  "questions_per_gpu": 4,
+  "group": 8,
+  "max_new_tokens": 4096,
+  "len_coef": 0.4,
+  "lr": 0.0001,
+  "warmup_steps": 10,
+  "clip": 1.0,
+  "train_batch": 2,
+  "lora_r": 32,
+  "lora_alpha": 64,
+  "save_steps": 20,
+  "pool": 100000,
+  "deadline": 1794628103.0,
+  "seed": 42
+ }
+}

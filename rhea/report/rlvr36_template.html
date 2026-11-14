@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qwen3.6 RLVR Run Report</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f6f5f2; --surface:#fcfcfb; --border:#e3e1da; --grid:#e9e7e0;
+  --text:#0b0b0b; --text2:#52514e; --muted:#84827a; --track:#eceae4;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --base:#8a887f; --good:#1a7f37; --bad:#b3261e;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#111110; --surface:#1a1a19; --border:#33322f; --grid:#2a2a27;
+    --text:#f0efec; --text2:#c3c2b7; --muted:#8f8e85; --track:#2a2a27;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --base:#9a988f; --good:#4cc26b; --bad:#f2817a;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111110; --surface:#1a1a19; --border:#33322f; --grid:#2a2a27;
+  --text:#f0efec; --text2:#c3c2b7; --muted:#8f8e85; --track:#2a2a27;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --base:#9a988f; --good:#4cc26b; --bad:#f2817a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1080px;margin:0 auto;padding:28px 16px 64px}
+h1{font-size:26px;line-height:1.2;margin:0 0 6px}
+h2{font-size:18px;margin:36px 0 4px}
+h3{font-size:14px;margin:0 0 2px;font-weight:600}
+p{margin:6px 0}
+.sub{color:var(--text2);max-width:76ch}
+.note{color:var(--muted);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;min-width:0}
+.grid{display:grid;gap:12px}
+.tiles{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-top:18px}
+.tile .k{color:var(--text2);font-size:13px}
+.tile .v{font-size:26px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.25}
+.tile .v small{font-size:14px;font-weight:500;color:var(--muted)}
+.tile .d{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.two{grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--text2);margin:6px 0 2px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px}
+.legend i.dot{width:10px;height:10px;border-radius:50%}
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{fill:var(--text2);font-size:12px;font-variant-numeric:tabular-nums}
+svg .lab{fill:var(--text);font-size:13px}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:10px 0 4px}
+button,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer}
+button.primary{background:var(--s1);border-color:var(--s1);color:#fff;min-width:84px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--s1);outline-offset:2px}
+input[type=range]{flex:1;min-width:160px;accent-color:var(--s1)}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:8px 0 12px}
+.readout div{border:1px solid var(--border);border-radius:8px;padding:6px 10px}
+.readout .k{font-size:12px;color:var(--text2)}
+.readout .v{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+#tip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);display:none;z-index:9;font-variant-numeric:tabular-nums;max-width:270px}
+#tip b{font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--text2);font-weight:600}
+.scroll{overflow-x:auto;max-height:420px;overflow-y:auto}
+ul.ins{padding-left:20px;margin:8px 0}
+ul.ins li{margin:8px 0;max-width:80ch}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--text2);font-size:13px}
+/* cluster map */
+.nodes{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media (max-width:760px){.nodes{grid-template-columns:repeat(2,1fr)}}
+.node{border:1px solid var(--border);border-radius:8px;padding:8px}
+.node .nm{font-size:12px;color:var(--text2);display:flex;justify-content:space-between;gap:6px;margin-bottom:6px}
+.gp{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.gpu{height:44px;border-radius:5px;background:var(--track);position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:center;cursor:default}
+.gpu .ph{position:absolute;inset:0;display:flex;gap:2px}
+.gpu .ph b{display:block;height:100%;transition:opacity .12s}
+.gpu .ph .r{background:var(--s1)} .gpu .ph .u{background:var(--s2)}
+.gpu span{position:relative;font-size:11px;font-weight:600;color:#fff;padding-bottom:2px;text-shadow:0 0 3px rgba(0,0,0,.55)}
+.phase{font-size:14px;margin:10px 0 2px;min-height:22px}
+.phase b{font-weight:600}
+/* horizontal bars */
+.hbar{display:flex;gap:2px;height:26px;border-radius:5px;overflow:hidden;margin:10px 0 6px}
+.hbar div{height:100%}
+.mem{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;font-size:13px;margin-top:8px}
+.mem .tr{height:14px;background:var(--track);border-radius:4px;overflow:hidden}
+.mem .tr div{height:100%;background:var(--s1);border-radius:0 4px 4px 0}
+.mem .n{font-variant-numeric:tabular-nums;color:var(--text2)}
+</style>
+</head>
+<body>
+<main>
+<h1>Qwen3.6-35B-A3B with RLVR: before and after, and how the 32 GPUs were used</h1>
+<p class="sub">Qwen3.6-35B-A3B, a mixture-of-experts model, was trained with reinforcement learning with verifiable rewards on T20 cricket questions (Rhea job 40421, 13 Nov 2026). The model answered questions itself and was rewarded only for a correct final number, with a bonus for shorter answers.</p>
+
+<div class="grid tiles" id="tiles"></div>
+
+<h2>How the 32 GPUs worked together</h2>
+<p class="sub" id="how"></p>
+<div class="card">
+  <div class="controls">
+    <button class="primary" id="play">Replay</button>
+    <input type="range" id="scrub" min="1" max="60" step="1" value="60" aria-label="Training step">
+    <label class="note">Speed <select id="speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="3">3x</option></select></label>
+  </div>
+  <div class="readout" id="readout"></div>
+  <div class="nodes" id="nodes"></div>
+  <div class="phase" id="phase"></div>
+  <div class="legend"><span><i style="background:var(--s1)"></i>Rollouts (the model answers questions)</span><span><i style="background:var(--s2)"></i>Update (gradients on those answers)</span></div>
+  <p class="note" id="gridnote"></p>
+</div>
+
+<h2>GPU usage and memory</h2>
+<p class="sub" id="usageSub"></p>
+<div class="grid tiles" id="usageTiles" style="margin-top:10px"></div>
+<div class="controls"><label class="note">Show <select id="gsel"></select></label></div>
+<div class="grid two">
+  <div class="card"><h3>GPU utilisation over the run</h3><p class="note">Percent of time the GPU was busy, averaged per minute</p><svg id="uUtil"></svg></div>
+  <div class="card"><h3>GPU memory in use over the run</h3><p class="note" id="uMemNote"></p><svg id="uMem"></svg></div>
+  <div class="card"><h3>Power draw over the run</h3><p class="note">Watts per GPU, averaged per minute</p><svg id="uPow"></svg></div>
+  <div class="card"><h3>Peak memory per node</h3><p class="note" id="memNote"></p><div class="mem" id="mem"></div>
+    <div class="scroll" style="margin-top:14px"><table id="gtbl"></table></div></div>
+</div>
+
+<h2>Answers processed per minute, on each GPU</h2>
+<p class="sub" id="rpmSub"></p>
+<div class="grid tiles" id="rpmTiles" style="margin-top:10px"></div>
+<div class="card" style="margin-top:12px"><h3>Answers per minute on one GPU</h3><p class="note" id="rpmNote"></p><svg id="rpmBar"></svg></div>
+<div class="card" style="margin-top:12px"><h3>All 32 GPUs, minute by minute</h3><p class="note">One row per GPU, one column per minute. Darker means more answers processed in that minute.</p><svg id="rpmHeat"></svg>
+  <div class="legend" id="rpmLegend"></div></div>
+<details><summary>Per-minute table</summary><div class="scroll"><table id="rpmTbl"></table></div></details>
+
+<div class="card" style="margin-top:12px"><h3>Utilisation of every GPU, minute by minute</h3><p class="note">One row per GPU, one column per minute. Darker means busier. Measured on all 32 GPUs.</p><svg id="uHeat"></svg><div class="legend" id="uHeatLegend"></div></div>
+
+<h2>What the model learned, step by step</h2>
+<p class="sub">Accuracy and length are measured on the training rollouts, on training questions with plain temperature-1 sampling. They are not benchmark numbers.</p>
+<div class="grid two">
+  <div class="card"><h3>Rollout accuracy</h3><p class="note">Share of the 1,024 answers per step that were correct</p><svg id="cAcc"></svg></div>
+  <div class="card"><h3>Mean answer length</h3><p class="note">Tokens per answer, reasoning included</p><svg id="cTok"></svg></div>
+  <div class="card"><h3>Questions that still taught something</h3><p class="note">Share of questions with both right and wrong answers among their 8 samples</p><svg id="cMix"></svg></div>
+  <div class="card"><h3>GPU utilisation per step</h3><p class="note" id="utilNote"></p><svg id="cUtil"></svg></div>
+</div>
+
+<h2>Where the time went</h2>
+<div class="grid two">
+  <div class="card"><h3>Whole job</h3><p class="note" id="budgetNote"></p><div class="hbar" id="budget"></div><div class="legend" id="budgetLegend"></div></div>
+  <div class="card"><h3>Seconds per step</h3><p class="note" id="stepNote"></p><svg id="cTime"></svg>
+    <div class="legend"><span><i style="background:var(--s1)"></i>Rollouts</span><span><i style="background:var(--s2)"></i>Update</span></div></div>
+</div>
+
+<h2>Before and after on the benchmark</h2>
+<p class="sub">600 held-out questions, 4 samples each, up to 4,096 tokens. "Before" is the base model; "after" is the base model with the RLVR adapter.</p>
+<div class="grid two">
+  <div class="card"><h3>Accuracy</h3><svg id="bAcc"></svg></div>
+  <div class="card"><h3>Mean tokens per answer</h3><svg id="bTok"></svg></div>
+</div>
+<div class="legend"><span><i class="dot" style="background:var(--base)"></i>Before (base model)</span><span><i class="dot" style="background:var(--s3)"></i>After (RLVR)</span></div>
+
+<h2>How well were the GPUs used?</h2>
+<div class="grid two">
+  <div class="card"><h3>What worked</h3><ul class="ins" id="good"></ul></div>
+  <div class="card"><h3>What was left on the table</h3><ul class="ins" id="bad"></ul></div>
+</div>
+<p class="note" id="caveat"></p>
+
+<h2>Compared with the Qwen3.8-27B run</h2>
+<p class="sub">Same dataset, same benchmark, same 32 GPUs. The two runs used different rollout caps and step counts, so read this as two recipes, not a controlled comparison.</p>
+<div class="card"><div class="scroll"><table id="cmp"></table></div></div>
+
+<details><summary>Per-step table</summary><div class="scroll"><table id="tbl"></table></div></details>
+</main>
+<div id="tip"></div>
+<script>
+const D = __DATA__;
+const S = D.steps, N = S.length, J = D.job, G = D.gpu, B = D.bench.base, F = D.bench.ft, A = D.args;
+const $ = q => document.querySelector(q), NS = "http://www.w3.org/2000/svg";
+const el = (t, a = {}, txt) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; return e; };
+const fmt = (x, d = 0) => x.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (x, d = 1) => fmt(x * 100, d) + "%";
+const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
+const tip = $("#tip");
+function showTip(ev, html) { tip.innerHTML = html; tip.style.display = "block"; const w = tip.offsetWidth, h = tip.offsetHeight; let x = ev.clientX + 14, y = ev.clientY + 14; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + h > innerHeight - 8) y = ev.clientY - h - 14; tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px"; }
+const hideTip = () => tip.style.display = "none";
+function hover(node, html) { node.addEventListener("mousemove", e => showTip(e, typeof html === "function" ? html() : html)); node.addEventListener("mouseleave", hideTip); }
+
+/* ---- derived numbers ---- */
+const tRoll = sum(S, s => s.ro), tUpd = sum(S, s => s.up), tLoop = S[N - 1].el, tOther = J.elapsed_s - tRoll - tUpd;
+const gpuH = J.gpus * J.elapsed_s / 3600, perGpu = A.questions_per_gpu * A.group, perStep = perGpu * J.gpus;
+const tokens = sum(S, s => s.tok * perStep);
+const nodeUtil = s => { const v = s.util.filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+const utilAvg = G.util_all;
+const conv = S.find(s => s.acc >= 0.985), zeroMixed = S.filter(s => s.mixed === 0).length;
+const after20 = tLoop - S[19].el, gpuH20 = J.gpus * (S[19].el + tOther) / 3600;
+const dAcc = (F.overall.accuracy - B.overall.accuracy) * 100;
+
+/* ---- tiles ---- */
+const sign = (x, d = 2) => (x >= 0 ? "+" : "") + fmt(x, d);
+const tile = (k, v, d) => `<div class="card tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
+$("#tiles").innerHTML =
+  tile("Benchmark accuracy", `${fmt(B.overall.accuracy * 100, 2)}% <small>to</small> ${fmt(F.overall.accuracy * 100, 2)}%`, `${sign(dAcc)} points on 600 held-out questions`) +
+  tile("Tokens per answer", `${fmt(B.overall.mean_tokens)} <small>to</small> ${fmt(F.overall.mean_tokens)}`, `${fmt((F.overall.mean_tokens / B.overall.mean_tokens - 1) * 100)}% on the benchmark`) +
+  tile("GPUs", `${J.gpus} <small>on ${J.nodes.length} nodes</small>`, `4 Vera Rubin GPUs per node, ${J.gpu_gb} GB each`) +
+  tile("Job time", `${fmt(J.elapsed_s / 60)} min`, `${fmt(gpuH, 1)} GPU-hours, ${J.start} to ${J.end}`) +
+  tile("Rollouts", fmt(N * perStep), `${fmt(perStep)} per step for ${N} steps, ${fmt(tokens / 1e6, 1)}M tokens generated`) +
+  tile("Measured GPU utilisation", `${fmt(utilAvg)}%`, `average of all ${J.gpus} GPUs over the training loop`);
+$("#how").textContent = `Every step ran on all ${J.gpus} GPUs at once. Each GPU held its own copy of the model, answered ${A.questions_per_gpu} questions ${A.group} times each (${perGpu} answers), then computed gradients on its own answers. The gradients were averaged across all ${J.gpus} GPUs into one update. Press Replay to watch the ${N} steps.`;
+$("#gridnote").textContent = `Each GPU tile is split by how that step's time was divided between rollouts and the update. The percentage is that GPU's measured utilisation during the step, from nvidia-smi readings every ${G.interval_s} s on every node.`;
+
+/* ---- cluster map ---- */
+const nodesEl = $("#nodes"), cells = [];
+J.nodes.forEach((n, i) => {
+  const d = document.createElement("div"); d.className = "node";
+  d.innerHTML = `<div class="nm"><span>${n}</span><span>GPUs ${i * 4}-${i * 4 + 3}</span></div><div class="gp"></div>`;
+  for (let g = 0; g < 4; g++) {
+    const c = document.createElement("div"); c.className = "gpu";
+    c.innerHTML = `<div class="ph"><b class="r"></b><b class="u"></b></div><span></span>`;
+    d.lastChild.appendChild(c);
+    const cell = { c, r: c.querySelector(".r"), u: c.querySelector(".u"), t: c.querySelector("span"), node: n, idx: i * 4 + g, sampled: true, g };
+    hover(c, () => { const s = S[curStep() - 1]; return `<b>${n}, GPU ${g}</b><br>Step ${s.s}: ${perGpu} answers<br>Rollouts ${fmt(s.ro, 1)} s, update ${fmt(s.up, 1)} s` + (s.util[cell.idx] != null ? `<br>Measured utilisation ${fmt(s.util[cell.idx])}%` : `<br>No reading in this step`); });
+    cells.push(cell);
+  }
+  nodesEl.appendChild(d);
+});
+
+/* ---- step charts ---- */
+const W = 520, M = { l: 44, r: 12, t: 10, b: 24 }, charts = [];
+function stepChart(id, H, y0, y1, yt, yf, body, band) {
+  const svg = $(id); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img");
+  const iw = W - M.l - M.r, ih = H - M.t - M.b, bw = iw / N;
+  const X = band ? s => M.l + (s - 0.5) * bw : s => M.l + (s - 1) / (N - 1) * iw;
+  const Y = v => M.t + (1 - (v - y0) / (y1 - y0)) * ih;
+  yt.forEach(v => { svg.appendChild(el("line", { x1: M.l, x2: W - M.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)" })); svg.appendChild(el("text", { x: M.l - 6, y: Y(v) + 4, "text-anchor": "end" }, yf(v))); });
+  D.axes.steps.forEach(s => svg.appendChild(el("text", { x: X(s), y: H - 6, "text-anchor": "middle" }, s === 1 ? "step 1" : s)));
+  const cid = id.slice(1) + "clip", cp = el("clipPath", { id: cid }), cr = el("rect", { x: 0, y: 0, width: W, height: H });
+  cp.appendChild(cr); svg.appendChild(cp);
+  const g = el("g", { "clip-path": `url(#${cid})` }); svg.appendChild(g);
+  body(g, X, Y, bw);
+  const cur = el("line", { y1: M.t, y2: M.t + ih, stroke: "var(--text2)", "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0 }); svg.appendChild(cur);
+  const hv = el("line", { y1: M.t, y2: M.t + ih, stroke: "var(--muted)", "stroke-width": 1, opacity: 0 }); svg.appendChild(hv);
+  const ov = el("rect", { x: M.l, y: M.t, width: iw, height: ih, fill: "transparent" }); svg.appendChild(ov);
+  ov.addEventListener("mousemove", e => { const b = ov.getBoundingClientRect(), f = (e.clientX - b.left) / b.width; const s = Math.max(1, Math.min(N, band ? Math.ceil(f * N) : Math.round(1 + f * (N - 1)))); hv.setAttribute("x1", X(s)); hv.setAttribute("x2", X(s)); hv.setAttribute("opacity", 1); showTip(e, stepTip(S[s - 1])); });
+  ov.addEventListener("mouseleave", () => { hv.setAttribute("opacity", 0); hideTip(); });
+  charts.push(c => { const x = band ? M.l + c * bw : X(c); cr.setAttribute("width", x + 1); cur.setAttribute("x1", x); cur.setAttribute("x2", x); cur.setAttribute("opacity", c >= N ? 0 : 1); });
+}
+const stepTip = s => `<b>Step ${s.s}</b><br>Accuracy ${pct(s.acc)}<br>Tokens ${fmt(s.tok)}, cut off ${pct(s.cut)}<br>Mixed questions ${pct(s.mixed)}<br>Rollouts ${fmt(s.ro, 1)} s, update ${fmt(s.up, 1)} s` + (nodeUtil(s) != null ? `<br>GPU utilisation ${fmt(nodeUtil(s))}% (all ${J.gpus})` : "");
+const line = (key, color) => (g, X, Y) => g.appendChild(el("path", { d: S.map((s, i) => (i ? "L" : "M") + X(s.s).toFixed(1) + " " + Y(key(s)).toFixed(1)).join(""), fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round" }));
+stepChart("#cAcc", 210, 70, 100, [70, 80, 90, 100], v => v + "%", line(s => s.acc * 100, "var(--s1)"));
+stepChart("#cTok", 210, 0, D.axes.tok[D.axes.tok.length - 1], D.axes.tok, v => fmt(v), line(s => s.tok, "var(--s1)"));
+stepChart("#cMix", 210, 0, D.axes.mix[D.axes.mix.length - 1], D.axes.mix, v => v + "%", line(s => s.mixed * 100, "var(--s1)"));
+stepChart("#cUtil", 210, 0, 100, [0, 25, 50, 75, 100], v => v + "%", line(s => nodeUtil(s) ?? 0, "var(--s1)"));
+const TMAX = D.axes.tmax;
+stepChart("#cTime", 250, 0, TMAX, D.axes.tticks, v => v + " s", (g, X, Y, bw) => {
+  const w = Math.max(1.5, bw - 1.2);
+  S.forEach(s => {
+    const ro = Math.min(s.ro, TMAX), up = Math.min(s.up, TMAX - ro), x = X(s.s) - w / 2;
+    g.appendChild(el("rect", { x, y: Y(ro), width: w, height: Y(0) - Y(ro), fill: "var(--s1)" }));
+    if (up > 0) g.appendChild(el("rect", { x, y: Y(ro + up), width: w, height: Math.max(0, Y(ro) - Y(ro + up) - 1), fill: "var(--s2)" }));
+  });
+}, true);
+$("#stepNote").textContent = `Step 1 took ${fmt(S[0].st)} s (it includes one-time compilation and the longest answers) and is clipped at ${TMAX} s. The last ten steps averaged ${fmt(sum(S.slice(-10), s => s.st) / 10)} s.`;
+$("#utilNote").textContent = `Mean of all ${J.gpus} GPUs, one reading every ${G.interval_s} s, averaged per step`;
+
+/* ---- time budget and memory ---- */
+const parts = [["Rollouts", tRoll, "var(--s1)"], ["Updates", tUpd, "var(--s2)"], ["Start-up, checkpoints, shutdown", tOther, "var(--base)"]];
+$("#budget").innerHTML = parts.map(p => `<div style="width:${p[1] / J.elapsed_s * 100}%;background:${p[2]}"></div>`).join("");
+[...$("#budget").children].forEach((d, i) => hover(d, `<b>${parts[i][0]}</b><br>${fmt(parts[i][1] / 60, 1)} min (${pct(parts[i][1] / J.elapsed_s)})`));
+$("#budgetLegend").innerHTML = parts.map(p => `<span><i style="background:${p[2]}"></i>${p[0]}: ${fmt(p[1] / 60, 1)} min (${pct(p[1] / J.elapsed_s, 0)})</span>`).join("");
+$("#budgetNote").textContent = `${fmt(J.elapsed_s / 60)} minutes of wall time on ${J.gpus} GPUs`;
+$("#memNote").textContent = `Highest reading on any of the node's 4 GPUs, out of ${J.gpu_gb} GB`;
+$("#mem").innerHTML = G.mem_peak_gb.map((v, i) => `<span>${G.units[i]}</span><div class="tr" data-i="${i}"><div style="width:${v / J.gpu_gb * 100}%"></div></div><span class="n">${fmt(v)} GB</span>`).join("");
+document.querySelectorAll("#mem .tr").forEach(t => { const i = +t.dataset.i; hover(t, `<b>${G.units[i]}</b><br>Fullest GPU peaked at ${fmt(G.mem_peak_gb[i], 1)} GB (${pct(G.mem_peak_gb[i] / J.gpu_gb, 0)})<br>Node average ${fmt(G.mem_avg_gb[i], 1)} GB`); });
+
+/* ---- measured usage over time ---- */
+const avgOf = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((p, q) => p + q, 0) / v.length : null; };
+const TM = G.t_min, TEND = Math.ceil(TM[TM.length - 1] / 10) * 10;
+const pick = (arr, g) => g < 0 ? TM.map((_, k) => avgOf(arr.map(a => a[k]))) : arr[g];
+function timeChart(id, arr, y0, y1, yt, yf, unit, d, cap) {
+  const svg = $(id), H = 220; svg.innerHTML = ""; svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img");
+  const iw = W - M.l - M.r, ih = H - M.t - M.b, X = t => M.l + t / TEND * iw, Y = v => M.t + (1 - (v - y0) / (y1 - y0)) * ih;
+  yt.forEach(v => { svg.appendChild(el("line", { x1: M.l, x2: W - M.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)" })); svg.appendChild(el("text", { x: M.l - 6, y: Y(v) + 4, "text-anchor": "end" }, yf(v))); });
+  for (let t = 0; t <= TEND; t += 20) svg.appendChild(el("text", { x: X(t), y: H - 6, "text-anchor": "middle" }, t === 0 ? "0 min" : t));
+  if (cap) { svg.appendChild(el("line", { x1: M.l, x2: W - M.r, y1: Y(cap), y2: Y(cap), stroke: "var(--text2)", "stroke-dasharray": "4 4" })); svg.appendChild(el("text", { x: W - M.r, y: Y(cap) - 5, "text-anchor": "end" }, `${cap} GB capacity`)); }
+  const g = +$("#gsel").value, v = pick(arr, g);
+  let dd = "", pen = false; v.forEach((x, k) => { if (x == null) { pen = false; return; } dd += (pen ? "L" : "M") + X(TM[k]).toFixed(1) + " " + Y(x).toFixed(1); pen = true; });
+  svg.appendChild(el("path", { d: dd, fill: "none", stroke: "var(--s1)", "stroke-width": 1.6, "stroke-linejoin": "round" }));
+  const hv = el("line", { y1: M.t, y2: M.t + ih, stroke: "var(--muted)", opacity: 0 }), dot = el("circle", { r: 4, fill: "var(--s1)", stroke: "var(--surface)", "stroke-width": 2, opacity: 0 });
+  svg.appendChild(hv); svg.appendChild(dot);
+  const ov = el("rect", { x: M.l, y: M.t, width: iw, height: ih, fill: "transparent" }); svg.appendChild(ov);
+  ov.addEventListener("mousemove", e => {
+    const b = ov.getBoundingClientRect(), t = (e.clientX - b.left) / b.width * TEND; let k = 0; TM.forEach((x, i) => { if (Math.abs(x - t) < Math.abs(TM[k] - t)) k = i; });
+    hv.setAttribute("x1", X(TM[k])); hv.setAttribute("x2", X(TM[k])); hv.setAttribute("opacity", 1);
+    if (v[k] != null) { dot.setAttribute("cx", X(TM[k])); dot.setAttribute("cy", Y(v[k])); dot.setAttribute("opacity", 1); }
+    showTip(e, `<b>${fmt(TM[k], 1)} min into training</b><br>` + arr.map((a, i) => `${i === g ? "<b>" : ""}${G.units[i]}: ${a[k] == null ? "no reading" : fmt(a[k], d) + unit}${i === g ? "</b>" : ""}`).join("<br>") + `<br>${g < 0 ? "<b>" : ""}Average: ${fmt(avgOf(arr.map(a => a[k])), d)}${unit}${g < 0 ? "</b>" : ""}`);
+  });
+  ov.addEventListener("mouseleave", () => { hv.setAttribute("opacity", 0); dot.setAttribute("opacity", 0); hideTip(); });
+}
+function drawUsage() {
+  timeChart("#uUtil", G.util, 0, 100, [0, 25, 50, 75, 100], v => v + "%", "%", 0);
+  timeChart("#uMem", G.mem_gb, 0, 300, [0, 100, 200, 300], v => v + " GB", " GB", 0, J.gpu_gb);
+  timeChart("#uPow", G.power_w, 0, 1500, [0, 500, 1000, 1500], v => fmt(v) + " W", " W", 0);
+}
+$("#gsel").innerHTML = `<option value="-1" selected>Average of all ${J.gpus} GPUs</option>` + G.units.map((u, i) => `<option value="${i}">${u} (4 GPUs)</option>`).join("");
+$("#gsel").addEventListener("change", drawUsage); drawUsage();
+const memPeakAll = Math.max(...G.mem_peak_gb), memAvgAll = avgOf(G.mem_avg_gb);
+$("#usageSub").textContent = `Measured with nvidia-smi on all ${J.nodes.length} nodes: one reading every ${G.interval_s} s for each of the ${J.gpus} GPUs (${fmt(G.samples)} readings in total). The charts show each node as the average of its 4 GPUs; the heatmap shows every GPU.`;
+$("#usageTiles").innerHTML =
+  tile("Average GPU utilisation", `${fmt(utilAvg)}%`, `${fmt(G.util_gpu_min)}% to ${fmt(G.util_gpu_max)}% across the ${J.gpus} GPUs`) +
+  tile("Peak GPU memory", `${fmt(memPeakAll)} GB`, `${pct(memPeakAll / J.gpu_gb, 0)} of ${J.gpu_gb} GB on the fullest GPU`) +
+  tile("Average GPU memory", `${fmt(memAvgAll)} GB`, `${pct(memAvgAll / J.gpu_gb, 0)} of ${J.gpu_gb} GB, mean of all ${J.gpus} GPUs`) +
+  tile("Average power", `${fmt(G.power_avg_w)} W`, `peak ${fmt(G.power_peak_w)} W, peak temperature ${G.temp_peak_c} °C`);
+$("#uMemNote").textContent = `Gigabytes in use out of ${J.gpu_gb} GB, averaged per minute`;
+$("#gtbl").innerHTML = "<tr><th>Node</th><th>Avg utilisation</th><th>Avg memory</th><th>Peak memory</th><th>Avg power</th><th>Peak temp</th></tr>" +
+  G.util_avg.map((u, i) => `<tr><td>${G.units[i]}</td><td>${fmt(u)}%</td><td>${fmt(G.mem_avg_gb[i])} GB</td><td>${fmt(G.mem_peak_gb[i])} GB</td><td>${fmt(avgOf(G.power_w[i]))} W</td><td>${G.temp_peak[i]} °C</td></tr>`).join("");
+
+/* ---- answers per minute per GPU ---- */
+const NB = Math.ceil(tLoop / 60), RPM = Array(NB).fill(0), STEPAT = Array(NB).fill(0);
+S.forEach(s => { const a = s.el - s.st, b = s.el; for (let m = Math.floor(a / 60); m <= Math.min(NB - 1, Math.floor(b / 60)); m++) { const ov = Math.min(b, (m + 1) * 60) - Math.max(a, m * 60); if (ov > 0) RPM[m] += perGpu * ov / s.st; } });
+RPM.forEach((_, m) => { const s = S.find(x => x.el >= (m + 1) * 60) || S[N - 1]; STEPAT[m] = s.s; });
+const rpmMax = Math.max(...RPM), rpmAvg = N * perGpu / (tLoop / 60), rpmLast = avgOf(RPM.slice(-11, -1));
+const rpmTip = m => `<b>Minute ${m + 1}</b> (around step ${STEPAT[m]})<br>${fmt(RPM[m], 1)} answers on each GPU<br>${fmt(RPM[m] * J.gpus)} across all ${J.gpus} GPUs`;
+$("#rpmSub").textContent = `A record here is one answer: the model writes it, it is scored, and it is used in the update. Every step gives each GPU exactly ${perGpu} answers (${A.questions_per_gpu} questions, ${A.group} samples each), and all ${J.gpus} GPUs start and finish each step together. So the count per minute is the same on every GPU; it comes from the step timings, spread evenly within each step.`;
+$("#rpmTiles").innerHTML =
+  tile("Answers per GPU, whole run", fmt(N * perGpu), `${fmt(N * perStep)} across ${J.gpus} GPUs`) +
+  tile("Average per GPU", `${fmt(rpmAvg, 1)} <small>per minute</small>`, `${fmt(rpmAvg * J.gpus)} per minute across the cluster`) +
+  tile("First 5 minutes", `${fmt(avgOf(RPM.slice(0, 5)), 1)} <small>per minute</small>`, `long answers and one-time compilation`) +
+  tile("Last 10 full minutes", `${fmt(rpmLast, 1)} <small>per minute</small>`, `${fmt(rpmLast * J.gpus)} per minute across the cluster`);
+$("#rpmNote").textContent = `Each bar is one minute of training. The rate rises as answers get shorter: about ${fmt(S[0].tok)} tokens at step 1, about ${fmt(S[N - 1].tok)} at step ${N}.`;
+(() => {
+  const svg = $("#rpmBar"), WW = 1040, H = 230, l = 44, r = 12, t = 10, b = 24, iw = WW - l - r, ih = H - t - b, bw = iw / NB, y1 = Math.ceil(rpmMax / 20) * 20;
+  svg.setAttribute("viewBox", `0 0 ${WW} ${H}`); svg.setAttribute("role", "img");
+  const Y = v => t + (1 - v / y1) * ih;
+  for (let v = 0; v <= y1; v += 20) { svg.appendChild(el("line", { x1: l, x2: WW - r, y1: Y(v), y2: Y(v), stroke: "var(--grid)" })); svg.appendChild(el("text", { x: l - 6, y: Y(v) + 4, "text-anchor": "end" }, v)); }
+  for (let m = 0; m <= NB; m += 10) svg.appendChild(el("text", { x: l + m * bw, y: H - 6, "text-anchor": "middle" }, m === 0 ? "0 min" : m));
+  RPM.forEach((v, m) => {
+    const x = l + m * bw + 1, w = bw - 2, h = Y(0) - Y(v);
+    svg.appendChild(el("path", { d: `M${x} ${Y(0)}V${Y(v) + Math.min(3, h)}q0 -${Math.min(3, h)} ${Math.min(3, w / 2)} -${Math.min(3, h)}H${x + w - Math.min(3, w / 2)}q${Math.min(3, w / 2)} 0 ${Math.min(3, w / 2)} ${Math.min(3, h)}V${Y(0)}Z`, fill: "var(--s1)" }));
+    const hit = el("rect", { x: l + m * bw, y: t, width: bw, height: ih, fill: "transparent" }); svg.appendChild(hit); hover(hit, rpmTip(m));
+  });
+})();
+(() => {
+  const svg = $("#rpmHeat"), WW = 1040, l = 104, r = 12, t = 4, rh = 10, b = 22, iw = WW - l - r, cw = iw / NB, H = t + J.gpus * rh + 7 * 4 + b;
+  svg.setAttribute("viewBox", `0 0 ${WW} ${H}`); svg.setAttribute("role", "img");
+  const rowY = g => t + g * rh + Math.floor(g / 4) * 4;
+  J.nodes.forEach((n, i) => svg.appendChild(el("text", { x: l - 8, y: rowY(i * 4) + 2 * rh + 4, "text-anchor": "end" }, `${n} (${i * 4}-${i * 4 + 3})`)));
+  for (let g = 0; g < J.gpus; g++) RPM.forEach((v, m) => svg.appendChild(el("rect", { x: l + m * cw, y: rowY(g), width: cw - 1, height: rh - 1, fill: "var(--s1)", opacity: (0.08 + 0.92 * v / rpmMax).toFixed(3) })));
+  for (let m = 0; m <= NB; m += 10) svg.appendChild(el("text", { x: l + m * cw, y: H - 6, "text-anchor": "middle" }, m === 0 ? "0 min" : m));
+  const ov = el("rect", { x: l, y: t, width: iw, height: rowY(J.gpus - 1) + rh - t, fill: "transparent" }); svg.appendChild(ov);
+  ov.addEventListener("mousemove", e => {
+    const bb = ov.getBoundingClientRect(), m = Math.max(0, Math.min(NB - 1, Math.floor((e.clientX - bb.left) / bb.width * NB))), yy = (e.clientY - bb.top) / bb.height * (rowY(J.gpus - 1) + rh - t);
+    let g = 0; for (let k = 0; k < J.gpus; k++) if (yy >= rowY(k) - t) g = k;
+    showTip(e, `<b>${J.nodes[Math.floor(g / 4)]}, GPU ${g % 4}</b><br>` + rpmTip(m).replace(/^<b>/, "").replace("</b>", ""));
+  });
+  ov.addEventListener("mouseleave", hideTip);
+  $("#rpmLegend").innerHTML = [0, 0.25, 0.5, 0.75, 1].map(f => `<span><i style="background:var(--s1);opacity:${0.08 + 0.92 * f}"></i>${fmt(rpmMax * f)}</span>`).join("") + `<span>answers per minute on one GPU</span>`;
+})();
+$("#rpmTbl").innerHTML = "<tr><th>Minute</th><th>Around step</th><th>Answers per GPU</th><th>Answers, all 32 GPUs</th><th>Running total per GPU</th></tr>" +
+  RPM.map((v, m) => `<tr><td>${m + 1}</td><td>${STEPAT[m]}</td><td>${fmt(v, 1)}</td><td>${fmt(v * J.gpus)}</td><td>${fmt(sum(RPM.slice(0, m + 1), x => x))}</td></tr>`).join("");
+
+/* ---- benchmark dumbbells ---- */
+const TYPES = [["overall", "Overall"], ["run_rate", "Run rate"], ["chase_rate", "Chase rate"], ["milestone", "Milestone"]];
+function dumbbell(id, key, x0, x1, xt, xf, vf) {
+  const svg = $(id), H = 40 + TYPES.length * 40, l = 86, r = 20; svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img");
+  const X = v => l + (v - x0) / (x1 - x0) * (W - l - r);
+  xt.forEach(v => { svg.appendChild(el("line", { x1: X(v), x2: X(v), y1: 8, y2: H - 26, stroke: "var(--grid)" })); svg.appendChild(el("text", { x: X(v), y: H - 8, "text-anchor": "middle" }, xf(v))); });
+  TYPES.forEach(([t, name], i) => {
+    const y = 28 + i * 40, b = B[t][key], f = F[t][key];
+    svg.appendChild(el("text", { x: l - 10, y: y + 4, "text-anchor": "end", class: "lab" }, name));
+    svg.appendChild(el("line", { x1: X(b), x2: X(f), y1: y, y2: y, stroke: "var(--muted)", "stroke-width": 2 }));
+    svg.appendChild(el("circle", { cx: X(b), cy: y, r: 6, fill: "var(--base)", stroke: "var(--surface)", "stroke-width": 2 }));
+    svg.appendChild(el("circle", { cx: X(f), cy: y, r: 6, fill: "var(--s3)", stroke: "var(--surface)", "stroke-width": 2 }));
+    svg.appendChild(el("text", { x: X(f) + (f >= b ? 11 : -11), y: y - 9, "text-anchor": f >= b ? "end" : "start", class: "lab" }, vf(f)));
+    const hit = el("rect", { x: l, y: y - 18, width: W - l - r, height: 36, fill: "transparent" }); svg.appendChild(hit);
+    hover(hit, `<b>${name}</b><br>Before ${vf(b)}<br>After ${vf(f)}<br>Samples ${fmt(F[t].samples)}`);
+  });
+}
+dumbbell("#bAcc", "accuracy", D.axes.bacc[0], 1, D.axes.bacc, v => fmt(v * 100) + "%", v => fmt(v * 100, 2) + "%");
+dumbbell("#bTok", "mean_tokens", 0, D.axes.btok[D.axes.btok.length - 1], D.axes.btok, v => fmt(v), v => fmt(v));
+
+/* ---- verdict ---- */
+const li = a => a.map(x => `<li>${x}</li>`).join("");
+const lastRo = sum(S.slice(-10), s => s.ro) / 10, lastUp = sum(S.slice(-10), s => s.up) / 10;
+const tokFloor = S.find(s => s.tok <= 1.25 * Math.min(...S.map(x => x.tok)));
+const afterFloor = tLoop - tokFloor.el, minAccAfter = Math.min(...S.filter(s => s.s > tokFloor.s).map(s => s.acc));
+const gpuHFloor = J.gpus * (tokFloor.el + tOther) / 3600, tokCut = 1 - F.overall.mean_tokens / B.overall.mean_tokens;
+$("#good").innerHTML = li([
+  `<b>All ${J.gpus} GPUs worked on every step.</b> Rollouts and gradients both ran on every GPU in parallel, so each update saw ${fmt(perStep)} fresh answers.`,
+  `<b>Load was even across GPUs.</b> Average utilisation per GPU ranged from ${fmt(G.util_gpu_min)}% to ${fmt(G.util_gpu_max)}%, measured on all ${J.gpus}.`,
+  `<b>Every question type ended at 97.8% or higher.</b> The biggest gain was on chase-rate questions: ${fmt(B.chase_rate.accuracy * 100, 2)}% to ${fmt(F.chase_rate.accuracy * 100, 2)}%.`,
+  `<b>Benchmark result.</b> Accuracy went from ${fmt(B.overall.accuracy * 100, 2)}% to ${fmt(F.overall.accuracy * 100, 2)}% (${sign(dAcc)} points), and answers became ${fmt(tokCut * 100)}% shorter (${fmt(B.overall.mean_tokens)} to ${fmt(F.overall.mean_tokens)} tokens).`]);
+const slipped = TYPES.filter(([t]) => t !== "overall" && F[t].accuracy < B[t].accuracy);
+$("#bad").innerHTML = li([
+  ...slipped.map(([t, name]) => `<b>${name} questions slipped.</b> Accuracy on them went from ${fmt(B[t].accuracy * 100, 2)}% to ${fmt(F[t].accuracy * 100, 2)}%, and ${fmt((1 - F[t]["pass@4"]) * F[t].questions)} of ${F[t].questions} are now wrong in all 4 samples (none before).`),
+  `<b>GPU memory was nearly exhausted.</b> Every node had a GPU peak between ${fmt(Math.min(...G.mem_peak_gb))} and ${fmt(Math.max(...G.mem_peak_gb))} GB of ${fmt(J.gpu_gb, 1)} GB, during the long-answer steps at the start. The run did not fail, but it had almost no headroom.`,
+  `<b>The first step was very slow.</b> Step 1 took ${fmt(S[0].st / 60)} minutes, ${fmt(S[0].ro / 60)} of them in rollouts: answers averaged ${fmt(S[0].tok)} tokens and the model's kernels were compiled for the first time.`,
+  `<b>A large part of the run came after answers stopped getting shorter.</b> Rollout accuracy passed 98.5% at step ${conv.s} and answer length reached its floor around step ${tokFloor.s}. The ${N - tokFloor.s} steps after that took ${fmt(afterFloor / 60)} minutes (${pct(afterFloor / J.elapsed_s, 0)} of the job) with rollout accuracy at ${pct(minAccAfter)} or higher.`,
+  `<b>Updates dominated step time.</b> Updates took ${pct(tUpd / (tRoll + tUpd), 0)} of step time. In the last ten steps a rollout phase took about ${fmt(lastRo)} s and the update about ${fmt(lastUp)} s. The update batch was cut to ${A.train_batch} sequences to stay inside GPU memory, which makes it slow.`,
+  `<b>The GPUs were not saturated.</b> Utilisation averaged ${fmt(utilAvg)}% across all ${J.gpus} GPUs (about ${fmt(G.util_rollout)}% in rollouts and ${fmt(G.util_update)}% in updates), and power averaged ${fmt(G.power_avg_w)} W against a ${fmt(G.power_peak_w)} W peak.`,
+  `<b>A shorter run would likely have cost less.</b> Stopping at step ${tokFloor.s} would have used about ${fmt(gpuHFloor)} GPU-hours instead of ${fmt(gpuH)}.`]);
+$("#caveat").textContent = `Limits of this data: GPU readings are ${G.interval_s} s apart, so the rollout/update split of utilisation is approximate. Answers per minute come from step timings, not per-GPU logs. Only the final adapter was benchmarked, so the benchmark score at earlier steps is not known.`;
+
+/* ---- utilisation heatmap, every GPU ---- */
+(() => {
+  const svg = $("#uHeat"), H32 = G.heat, NBH = H32[0].length, WW = 1040, l = 104, r = 12, t = 4, rh = 10, b = 22, iw = WW - l - r, cw = iw / NBH, H = t + J.gpus * rh + 7 * 4 + b;
+  svg.setAttribute("viewBox", `0 0 ${WW} ${H}`); svg.setAttribute("role", "img");
+  const rowY = g => t + g * rh + Math.floor(g / 4) * 4;
+  J.nodes.forEach((n, i) => svg.appendChild(el("text", { x: l - 8, y: rowY(i * 4) + 2 * rh + 4, "text-anchor": "end" }, `${n} (${i * 4}-${i * 4 + 3})`)));
+  H32.forEach((row, g) => row.forEach((v, m) => { if (v != null) svg.appendChild(el("rect", { x: l + m * cw, y: rowY(g), width: Math.max(0.5, cw - 0.6), height: rh - 1, fill: "var(--s1)", opacity: (0.06 + 0.94 * v / 100).toFixed(3) })); }));
+  for (let m = 0; m <= NBH; m += 20) svg.appendChild(el("text", { x: l + m * cw, y: H - 6, "text-anchor": "middle" }, m === 0 ? "0 min" : m));
+  const hh = rowY(J.gpus - 1) + rh - t, ov = el("rect", { x: l, y: t, width: iw, height: hh, fill: "transparent" }); svg.appendChild(ov);
+  ov.addEventListener("mousemove", e => {
+    const bb = ov.getBoundingClientRect(), m = Math.max(0, Math.min(NBH - 1, Math.floor((e.clientX - bb.left) / bb.width * NBH))), yy = (e.clientY - bb.top) / bb.height * hh;
+    let g = 0; for (let k = 0; k < J.gpus; k++) if (yy >= rowY(k) - t) g = k;
+    showTip(e, `<b>${J.nodes[Math.floor(g / 4)]}, GPU ${g % 4}</b><br>Minute ${m + 1}: ${H32[g][m] == null ? "no reading" : fmt(H32[g][m]) + "% utilisation"}`);
+  });
+  ov.addEventListener("mouseleave", hideTip);
+  $("#uHeatLegend").innerHTML = [0, 25, 50, 75, 100].map(f => `<span><i style="background:var(--s1);opacity:${0.06 + 0.94 * f / 100}"></i>${f}%</span>`).join("");
+})();
+
+/* ---- comparison with the 27B run ---- */
+(() => {
+  const P = D.prev, row = (k, a, b) => `<tr><td>${k}</td><td>${a}</td><td>${b}</td></tr>`;
+  $("#cmp").innerHTML = `<tr><th>Measure</th><th>${P.name}</th><th>${D.model}</th></tr>` +
+    row("Benchmark accuracy before", fmt(P.base.accuracy * 100, 2) + "%", fmt(B.overall.accuracy * 100, 2) + "%") +
+    row("Benchmark accuracy after", fmt(P.ft.accuracy * 100, 2) + "%", fmt(F.overall.accuracy * 100, 2) + "%") +
+    row("Change in accuracy", sign((P.ft.accuracy - P.base.accuracy) * 100) + " points", sign(dAcc) + " points") +
+    row("Tokens per answer before", fmt(P.base.mean_tokens), fmt(B.overall.mean_tokens)) +
+    row("Tokens per answer after", fmt(P.ft.mean_tokens), fmt(F.overall.mean_tokens)) +
+    row("Cut-off answers before", pct(P.base.truncated_rate, 2), pct(B.overall.truncated_rate, 2)) +
+    row("Cut-off answers after", pct(P.ft.truncated_rate, 2), pct(F.overall.truncated_rate, 2)) +
+    row("Training steps", P.steps, N) +
+    row("Rollouts", fmt(P.rollouts), fmt(N * perStep)) +
+    row("Rollout cap (tokens)", fmt(P.max_new_tokens), fmt(A.max_new_tokens)) +
+    row("Trainable LoRA parameters", P.trainable, D.trainable) +
+    row("Training job time", fmt(P.elapsed_s / 60) + " min", fmt(J.elapsed_s / 60) + " min") +
+    row("GPU-hours", fmt(P.elapsed_s * 32 / 3600, 1), fmt(gpuH, 1));
+})();
+
+/* ---- table ---- */
+$("#tbl").innerHTML = "<tr><th>Step</th><th>Accuracy</th><th>Tokens</th><th>Cut off</th><th>Mixed questions</th><th>Rollouts (s)</th><th>Update (s)</th><th>GPU utilisation</th></tr>" +
+  S.map(s => `<tr><td>${s.s}</td><td>${pct(s.acc)}</td><td>${fmt(s.tok)}</td><td>${pct(s.cut)}</td><td>${pct(s.mixed)}</td><td>${fmt(s.ro, 1)}</td><td>${fmt(s.up, 1)}</td><td>${nodeUtil(s) == null ? "" : fmt(nodeUtil(s)) + "%"}</td></tr>`).join("");
+
+/* ---- replay ---- */
+let cur = N, playing = false, last = 0;
+const curStep = () => Math.max(1, Math.min(N, Math.ceil(cur)));
+function draw(c) {
+  cur = Math.max(0.001, Math.min(N, c));
+  const s = S[curStep() - 1], f = cur - (s.s - 1), share = s.ro / (s.ro + s.up), inRoll = f < share;
+  charts.forEach(fn => fn(cur));
+  $("#scrub").value = s.s;
+  $("#readout").innerHTML = [["Step", `${s.s} / ${N}`], ["Rollout accuracy", pct(s.acc)], ["Tokens per answer", fmt(s.tok)], ["Step time", fmt(s.st) + " s"], ["Answers so far", fmt(s.s * perStep)], ["Elapsed", fmt(s.el / 60, 1) + " min"]]
+    .map(([k, v]) => `<div><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+  cells.forEach(x => {
+    x.r.style.width = share * 100 + "%"; x.u.style.width = (1 - share) * 100 + "%";
+    x.r.style.opacity = playing && !inRoll ? 0.25 : 1; x.u.style.opacity = playing && inRoll ? 0.25 : 1;
+    x.t.textContent = s.util[x.idx] != null ? fmt(s.util[x.idx]) + "%" : "";
+  });
+  $("#phase").innerHTML = playing
+    ? (inRoll ? `<b>Step ${s.s}: rollouts.</b> Each GPU is writing ${perGpu} answers (${fmt(perStep)} in total).` : `<b>Step ${s.s}: update.</b> Each GPU scores its answers and computes gradients, which are averaged across all ${J.gpus}.`)
+    : `<b>Step ${s.s}.</b> Rollouts took ${fmt(s.ro, 1)} s and the update ${fmt(s.up, 1)} s. Drag the slider or press Replay.`;
+}
+function tick(t) { if (!playing) return; const dt = Math.min(100, t - last); last = t; const c = cur + dt / 1000 * 5 * +$("#speed").value; if (c >= N) { playing = false; $("#play").textContent = "Replay"; draw(N); return; } draw(c); requestAnimationFrame(tick); }
+$("#play").addEventListener("click", () => { if (playing) { playing = false; $("#play").textContent = "Resume"; draw(cur); return; } if (cur >= N) cur = 0.001; playing = true; $("#play").textContent = "Pause"; last = performance.now(); requestAnimationFrame(tick); });
+$("#scrub").addEventListener("input", e => { playing = false; $("#play").textContent = "Replay"; draw(+e.target.value); });
+draw(N);
+</script>
+</body>
+</html>

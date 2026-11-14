@@ -54,7 +54,7 @@ datasets: [{a.dataset_id}]
 tags: [lora, reasoning, cricket, reinforcement-learning, rlvr]
 ---
 
-# Qwen3.8-27B cricket reasoning LoRA, trained with RLVR
+# {a.base_model_id.split('/')[-1]} cricket reasoning LoRA, trained with RLVR
 
 LoRA adapter for `{a.base_model_id}` trained with reinforcement learning with verifiable rewards (RLVR) on questions
 from [`{a.dataset_id}`](https://huggingface.co/datasets/{a.dataset_id}). No reasoning traces were used as targets:
@@ -68,7 +68,8 @@ the model answered the questions itself and was rewarded only when its final num
 - Advantage: reward minus the mean reward of that question's samples. Loss: advantage x mean token negative log-likelihood
   of the sampled answer (policy gradient with a group baseline, one update per batch of fresh rollouts).
 - {res['steps']} steps, {res['rollouts_total']:,} rollouts in total, {res['world_size']} GPUs, learning rate {ta['lr']},
-  LoRA r={ta['lora_r']}, alpha={ta['lora_alpha']} on the language model's attention, Gated-DeltaNet and MLP projections.
+  LoRA r={ta['lora_r']}, alpha={ta['lora_alpha']} on the language model's attention, Gated-DeltaNet and MLP projections (for the mixture-of-experts
+  model: the shared-expert MLP only; the routed experts stay frozen).
 - Training time: {res['train_hours']:.1f} hours on NVIDIA Vera Rubin GPUs.
 
 ## Before and after

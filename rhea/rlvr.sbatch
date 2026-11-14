@@ -20,6 +20,11 @@ if [[ -f "$RUN_DIR/train_result.json" ]]; then echo "run $RUN_NAME already finis
 echo "[$(date +%T)] job $SLURM_JOB_ID ($SLURM_JOB_NAME) on $SLURM_JOB_NODELIST ($SLURM_NNODES nodes x $GPUS_PER_NODE GPUs), ends $end"
 echo "run $RUN_NAME args: $ARGS"
 
+# GPU logger on every node (utilisation, memory, power every 15 s) -> $RUN_DIR/gpulog/<node>-<jobid>.csv. Never fatal.
+mkdir -p "$RUN_DIR/gpulog"
+srun --overlap --ntasks-per-node=1 bash -c 'exec nvidia-smi --query-gpu=timestamp,index,utilization.gpu,memory.used,memory.total,power.draw,temperature.gpu --format=csv,noheader,nounits -l 15 > "'"$RUN_DIR"'/gpulog/$(hostname -s)-'"$SLURM_JOB_ID"'.csv"' >/dev/null 2>&1 &
+GPULOG_PID=$!
+
 srun --container-image="$IMAGE_SQSH" --container-mounts="$LUSTRE_DIR:$LUSTRE_DIR" --container-mount-home \
      --no-container-remap-root --container-workdir="$RUN_FROM" \
      --container-env=HF_TOKEN,WANDB_API_KEY,WANDB_ENTITY,WANDB_PROJECT,WANDB_MODE,WANDB_DIR bash -c '
@@ -32,4 +37,5 @@ srun --container-image="$IMAGE_SQSH" --container-mounts="$LUSTRE_DIR:$LUSTRE_DIR
     --rdzv_id="$SLURM_JOB_ID" --rdzv_backend=c10d --rdzv_endpoint="$MASTER_ADDR:$MASTER_PORT" \
     '"$CODE_DIR"'/rlvr.py --model_dir "$MODEL_DIR" --data_dir "$DATA_LOCAL" --out_dir "$RUN_DIR" --run_name "$RUN_NAME" $ARGS
 '
+kill "$GPULOG_PID" 2>/dev/null || true
 echo "[$(date +%T)] finished"

@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two RLVR Runs Compared</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f6f5f2; --surface:#fcfcfb; --border:#e3e1da; --grid:#e9e7e0;
+  --text:#0b0b0b; --text2:#52514e; --muted:#84827a; --track:#eceae4;
+  --s1:#2a78d6; --s2:#eb6834; --base:#8a887f;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#111110; --surface:#1a1a19; --border:#33322f; --grid:#2a2a27;
+    --text:#f0efec; --text2:#c3c2b7; --muted:#8f8e85; --track:#2a2a27;
+    --s1:#3987e5; --s2:#d95926; --base:#9a988f;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111110; --surface:#1a1a19; --border:#33322f; --grid:#2a2a27;
+  --text:#f0efec; --text2:#c3c2b7; --muted:#8f8e85; --track:#2a2a27;
+  --s1:#3987e5; --s2:#d95926; --base:#9a988f;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1080px;margin:0 auto;padding:28px 16px 64px}
+h1{font-size:26px;line-height:1.2;margin:0 0 6px}
+h2{font-size:18px;margin:38px 0 4px}
+h3{font-size:14px;margin:0 0 2px;font-weight:600}
+p{margin:6px 0}
+.sub{color:var(--text2);max-width:78ch}
+.note{color:var(--muted);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;min-width:0}
+.grid{display:grid;gap:12px}
+.two{grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))}
+.tiles{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:12px}
+.tile .k{color:var(--text2);font-size:13px}
+.tile .v{font-size:24px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.25}
+.tile .v small{font-size:14px;font-weight:500;color:var(--muted)}
+.tile .d{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.runhead{display:flex;align-items:center;gap:8px;font-weight:600;margin:18px 0 0}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;flex:none}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--text2);margin:6px 0 2px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px}
+.legend i.dot{border-radius:50%;width:10px;height:10px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{fill:var(--text2);font-size:12px;font-variant-numeric:tabular-nums}
+svg .lab{fill:var(--text);font-size:13px}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:10px 0 4px}
+button,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer}
+button.primary{background:var(--s1);border-color:var(--s1);color:#fff;min-width:84px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--s1);outline-offset:2px}
+input[type=range]{flex:1;min-width:160px;accent-color:var(--s1)}
+#tip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);display:none;z-index:9;font-variant-numeric:tabular-nums;max-width:290px}
+#tip b{font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--text2);font-weight:600}
+td.l,th.l{text-align:left}
+.scroll{overflow-x:auto}
+.tall{max-height:420px;overflow-y:auto}
+ul.ins{padding-left:20px;margin:8px 0}
+ul.ins li{margin:8px 0;max-width:84ch}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--text2);font-size:13px}
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+.flow div{border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--surface)}
+.flow b{display:block;font-size:13px}
+.flow span{font-size:12.5px;color:var(--text2)}
+.flow .n{font-size:12px;color:var(--muted)}
+.race{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:12px;margin:10px 0}
+.lane{border:1px solid var(--border);border-radius:8px;padding:10px}
+.lane .nm{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+.lane .st{font-size:13px;color:var(--text2);min-height:20px;margin:4px 0 8px}
+.cells{display:grid;grid-template-columns:repeat(16,1fr);gap:3px}
+.cells i{display:block;height:16px;border-radius:3px;background:var(--track);transition:opacity .12s}
+.ro{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+.ro div{border:1px solid var(--border);border-radius:6px;padding:4px 8px}
+.ro .k{font-size:11.5px;color:var(--text2)}
+.ro .v{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.ok{color:var(--text2)} .fail{font-weight:600}
+</style>
+</head>
+<body>
+<main>
+<h1>Two RLVR runs on Rhea, end to end</h1>
+<p class="sub">Two models were trained with reinforcement learning with verifiable rewards (RLVR) on the same T20 cricket questions, on the same 32 Vera Rubin GPUs, on 13 November 2026. This page covers what was done, what each model learned, the before and after benchmark, how the GPUs were used, and what to change next time.</p>
+<div id="heads"></div>
+
+<h2>How RLVR worked here</h2>
+<p class="sub">No worked solutions were used as training targets. The model answered questions itself, and a checker compared its final number with the exact answer.</p>
+<div class="flow" id="flow"></div>
+<div class="card" style="margin-top:12px"><h3>The two recipes</h3><p class="note">Same method and dataset; the settings that differ are what the second model needed.</p><div class="scroll"><table id="recipe"></table></div></div>
+
+<h2>Replay: both runs on one clock</h2>
+<p class="sub">Both runs start at minute 0. Press Play to watch accuracy rise and answers shrink as the minutes pass. Each strip of 32 squares is one run's GPUs: solid while they write answers, faded while they compute the update.</p>
+<div class="card">
+  <div class="controls">
+    <button class="primary" id="play">Play</button>
+    <input type="range" id="scrub" min="0" max="160" step="0.5" value="160" aria-label="Minutes since start">
+    <label class="note">Speed <select id="speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="3">3x</option></select></label>
+    <span class="note" id="clock"></span>
+  </div>
+  <div class="race" id="race"></div>
+  <div class="grid two">
+    <div><h3>Rollout accuracy over time</h3><p class="note">Share of each step's 1,024 answers that were correct</p><svg id="rAcc"></svg></div>
+    <div><h3>Answer length over time</h3><p class="note">Mean tokens per answer, reasoning included</p><svg id="rTok"></svg></div>
+  </div>
+  <div class="legend" id="lgRace"></div>
+</div>
+
+<h2>Before and after on the benchmark</h2>
+<p class="sub">600 held-out questions, 4 samples each, up to 4,096 tokens, identical for both models. Grey is the base model; the coloured dot is the same model with its RLVR adapter.</p>
+<div class="grid two">
+  <div class="card"><h3>Accuracy</h3><svg id="bAcc"></svg></div>
+  <div class="card"><h3>Mean tokens per answer</h3><svg id="bTok"></svg></div>
+</div>
+<div class="legend" id="lgBench"></div>
+<div class="card" style="margin-top:12px"><div class="scroll"><table id="benchTbl"></table></div></div>
+
+<h2>What each model learned, step by step</h2>
+<p class="sub">Measured on the training rollouts, not the benchmark. The two runs used different answer-length caps, so their starting points are not comparable.</p>
+<div class="grid two">
+  <div class="card"><h3>Rollout accuracy by step</h3><svg id="sAcc"></svg></div>
+  <div class="card"><h3>Answer length by step</h3><svg id="sTok"></svg></div>
+  <div class="card"><h3>Questions that still taught something</h3><p class="note">Share of questions with both right and wrong answers among their 8 samples</p><svg id="sMix"></svg></div>
+  <div class="card"><h3>Seconds per step</h3><p class="note" id="sTimeNote"></p><svg id="sTime"></svg></div>
+</div>
+<div class="legend" id="lgStep"></div>
+
+<h2>How the 32 GPUs were used</h2>
+<p class="sub" id="gpuSub"></p>
+<div class="grid two">
+  <div class="card"><h3>GPU utilisation over time</h3><p class="note">Percent busy, averaged per minute</p><svg id="gUtil"></svg></div>
+  <div class="card"><h3>GPU memory in use over time</h3><p class="note">Average per GPU, with the 286.5 GB capacity line</p><svg id="gMem"></svg></div>
+  <div class="card"><h3>Answers processed per minute, per GPU</h3><p class="note">From step timings; every GPU handles 32 answers per step</p><svg id="gRpm"></svg></div>
+  <div class="card"><h3>Where the job time went</h3><p class="note">Minutes of wall time on 32 GPUs</p><svg id="gTime"></svg></div>
+</div>
+<div class="legend" id="lgGpu"></div>
+<div class="card" style="margin-top:12px"><div class="scroll"><table id="gpuTbl"></table></div></div>
+
+<h2>Insights</h2>
+<div class="grid two">
+  <div class="card"><h3>What the two runs agree on</h3><ul class="ins" id="insAgree"></ul></div>
+  <div class="card"><h3>Where they differ</h3><ul class="ins" id="insDiff"></ul></div>
+  <div class="card"><h3>What to watch</h3><ul class="ins" id="insWatch"></ul></div>
+  <div class="card"><h3>What to change next time</h3><ul class="ins" id="insNext"></ul></div>
+</div>
+<p class="note" id="caveat"></p>
+
+<h2>Every job, in order</h2>
+<p class="sub">All work ran as Slurm jobs on Rhea. Models, checkpoints, adapters and logs are on Lustre.</p>
+<div class="card"><div class="scroll"><table id="jobs"></table></div></div>
+<div class="card" style="margin-top:12px"><h3>Where the results are</h3><div class="scroll"><table id="where"></table></div></div>
+
+<details><summary>Per-step table, both runs</summary><div class="scroll tall"><table id="stepTbl"></table></div></details>
+</main>
+<div id="tip"></div>
+<script>
+const DATA = __DATA__;
+const $ = q => document.querySelector(q), NS = "http://www.w3.org/2000/svg";
+const el = (t, a = {}, txt) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; return e; };
+const fmt = (x, d = 0) => x.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (x, d = 1) => fmt(x * 100, d) + "%";
+const sign = (x, d = 2) => (x >= 0 ? "+" : "") + fmt(x, d);
+const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
+const avgOf = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((p, q) => p + q, 0) / v.length : null; };
+const tip = $("#tip");
+function showTip(ev, html) { tip.innerHTML = html; tip.style.display = "block"; const w = tip.offsetWidth, h = tip.offsetHeight; let x = ev.clientX + 14, y = ev.clientY + 14; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + h > innerHeight - 8) y = ev.clientY - h - 14; tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px"; }
+const hideTip = () => tip.style.display = "none";
+function hover(node, html) { node.addEventListener("mousemove", e => showTip(e, typeof html === "function" ? html() : html)); node.addEventListener("mouseleave", hideTip); }
+
+/* ---- per-run derived numbers ---- */
+function prep(D, o) {
+  const S = D.steps, N = S.length, J = D.job, G = D.gpu, A = D.args, B = D.bench.base, F = D.bench.ft;
+  const perGpu = A.questions_per_gpu * A.group, perStep = perGpu * J.gpus;
+  const tRoll = sum(S, s => s.ro), tUpd = sum(S, s => s.up), tLoop = S[N - 1].el, tOther = J.elapsed_s - tRoll - tUpd;
+  const NB = Math.ceil(tLoop / 60), rpm = Array(NB).fill(0);
+  S.forEach(s => { const a = s.el - s.st, b = s.el; for (let m = Math.floor(a / 60); m <= Math.min(NB - 1, Math.floor(b / 60)); m++) { const ov = Math.min(b, (m + 1) * 60) - Math.max(a, m * 60); if (ov > 0) rpm[m] += perGpu * ov / s.st; } });
+  // per-minute utilisation and memory, averaged over the GPUs that were measured
+  const bins = (arrs) => { const out = Array.from({ length: NB }, () => []); arrs.forEach(a => a.forEach((v, k) => { if (v != null) { const m = Math.min(NB - 1, Math.floor(G.t_min[k])); if (m >= 0) out[m].push(v); } })); return out.map(avgOf); };
+  const lateTok = S.slice(Math.floor(N / 2)).map(s => s.tok).sort((x, y) => x - y), medTok = lateTok[Math.floor(lateTok.length / 2)], floor = S.find(s => s.tok <= 1.25 * medTok), conv = S.find(s => s.acc >= 0.985);
+  return { ...o, D, S, N, J, G, A, B, F, perGpu, perStep, tRoll, tUpd, tLoop, tOther, rpm, NB,
+    util: bins(G.util), mem: bins(G.mem_gb), gpuH: J.gpus * J.elapsed_s / 3600, tokens: sum(S, s => s.tok * perStep),
+    utilAvg: G.util_all != null ? G.util_all : avgOf(G.util_avg), memPeak: Math.max(...G.mem_peak_gb), memAvg: avgOf(G.mem_avg_gb),
+    floor, conv, afterFloor: tLoop - floor.el, gpuHFloor: J.gpus * (floor.el + tOther) / 3600,
+    dAcc: (F.overall.accuracy - B.overall.accuracy) * 100, tokCut: 1 - F.overall.mean_tokens / B.overall.mean_tokens };
+}
+const R = [
+  prep(DATA.a, { name: "Qwen3.8-27B", color: "var(--s1)", measured: "4 of 32 GPUs (one node, sampled by W&B)", arch: "Dense, 27B parameters", trainable: "217.6M (0.79%)", lora: "attention, Gated-DeltaNet and all MLP projections",
+    hf: "Balab2021/Qwen3.8-27B-Cricket-Reasoning-RLVR", wb: "qwen38-cricket-rlvr-rhea / 9b549db6", lustre: "cricket-rhea/runs/cricket-rlvr-1113/adapter", adapterMb: 870 }),
+  prep(DATA.b, { name: "Qwen3.6-35B-A3B", color: "var(--s2)", measured: "all 32 GPUs (nvidia-smi on every node)", arch: "Mixture of experts, 35B parameters, about 3B active per token", trainable: "38.3M (0.11%)", lora: "attention, Gated-DeltaNet and the shared-expert MLP (routed experts frozen)",
+    hf: "Balab2021/Qwen3.6-35B-A3B-Cricket-Reasoning-RLVR", wb: "qwen36-cricket-rlvr-rhea / 573a3782", lustre: "cricket-rhea/runs/qwen36-rlvr-1113/adapter", adapterMb: 153 })];
+const sw = r => `<span class="sw" style="background:${r.color}"></span>`;
+const legend = R.map(r => `<span><i style="background:${r.color}"></i>${r.name}</span>`).join("");
+["#lgRace", "#lgStep", "#lgGpu"].forEach(q => $(q).innerHTML = legend);
+$("#lgBench").innerHTML = `<span><i class="dot" style="background:var(--base)"></i>Before (base model)</span>` + R.map(r => `<span><i class="dot" style="background:${r.color}"></i>After, ${r.name}</span>`).join("");
+
+/* ---- headline tiles ---- */
+const tile = (k, v, d) => `<div class="card tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
+$("#heads").innerHTML = R.map(r => `<div class="runhead">${sw(r)}${r.name}</div><div class="grid tiles">` +
+  tile("Benchmark accuracy", `${fmt(r.B.overall.accuracy * 100, 2)}% <small>to</small> ${fmt(r.F.overall.accuracy * 100, 2)}%`, `${sign(r.dAcc)} points`) +
+  tile("Tokens per answer", `${fmt(r.B.overall.mean_tokens)} <small>to</small> ${fmt(r.F.overall.mean_tokens)}`, `${fmt(-r.tokCut * 100)}% on the benchmark`) +
+  tile("Training", `${fmt(r.J.elapsed_s / 60)} min`, `${r.N} steps, ${fmt(r.N * r.perStep)} rollouts, ${fmt(r.gpuH, 1)} GPU-hours`) +
+  tile("GPU utilisation", `${fmt(r.utilAvg)}%`, `peak memory ${fmt(r.memPeak)} GB; ${r.measured}`) + `</div>`).join("");
+
+/* ---- method and recipe ---- */
+$("#flow").innerHTML = [
+  ["1. Questions", "Each GPU draws 4 training questions per step from the 500K cricket dataset.", "128 questions per step"],
+  ["2. Rollouts", "The current model answers each question 8 times in thinking mode, sampling at temperature 1.", "1,024 answers per step"],
+  ["3. Reward", "A finished, correct final number earns 1 minus a length penalty. Wrong, missing or cut-off answers earn 0.", "checked against the exact answer"],
+  ["4. Advantage", "Each answer is compared with the mean reward of the 8 answers to the same question.", "better than average is reinforced"],
+  ["5. Update", "Every GPU computes gradients on its own answers; they are averaged into one LoRA update.", "one update per step"],
+  ["6. Benchmark", "Base model and tuned model answer the same 600 held-out questions, 4 samples each.", "before and after"],
+  ["7. Publish", "Metrics and the before/after table go to W&B; the adapter goes to Lustre and a private Hugging Face repo.", "per run"]]
+  .map(x => `<div><b>${x[0]}</b><span>${x[1]}</span><div class="n">${x[2]}</div></div>`).join("");
+const row = (k, f) => `<tr><td>${k}</td>${R.map(r => `<td>${f(r)}</td>`).join("")}</tr>`;
+const head = `<tr><th>Measure</th>${R.map(r => `<th>${r.name}</th>`).join("")}</tr>`;
+$("#recipe").innerHTML = head +
+  row("Model type", r => r.arch) + row("LoRA placed on", r => r.lora) + row("Trainable parameters", r => r.trainable) +
+  row("Answer cap during training", r => fmt(r.A.max_new_tokens) + " tokens") + row("Length penalty", r => `${r.A.len_coef} x tokens / cap`) +
+  row("Sequences per backward pass", r => r.A.train_batch || 8) + row("Steps", r => r.N) + row("Rollouts", r => fmt(r.N * r.perStep)) +
+  row("Learning rate, LoRA rank", r => `${r.A.lr}, r=${r.A.lora_r}`) + row("Nodes x GPUs", r => `${r.J.nodes.length} x 4`);
+
+/* ---- generic chart ---- */
+const W = 520, M = { l: 46, r: 14, t: 10, b: 24 }, replay = [];
+function chart(id, o) {
+  const svg = $(id), H = o.H || 220; svg.innerHTML = ""; svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img");
+  const iw = W - M.l - M.r, ih = H - M.t - M.b, X = v => M.l + (v - o.x0) / (o.x1 - o.x0) * iw, Y = v => M.t + (1 - (v - o.y0) / (o.y1 - o.y0)) * ih;
+  o.yt.forEach(v => { svg.appendChild(el("line", { x1: M.l, x2: W - M.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)" })); svg.appendChild(el("text", { x: M.l - 6, y: Y(v) + 4, "text-anchor": "end" }, o.yf(v))); });
+  o.xt.forEach(v => svg.appendChild(el("text", { x: X(v), y: H - 6, "text-anchor": "middle" }, o.xf(v))));
+  if (o.cap) { svg.appendChild(el("line", { x1: M.l, x2: W - M.r, y1: Y(o.cap[0]), y2: Y(o.cap[0]), stroke: "var(--text2)", "stroke-dasharray": "4 4" })); svg.appendChild(el("text", { x: W - M.r, y: Y(o.cap[0]) - 5, "text-anchor": "end" }, o.cap[1])); }
+  const cid = id.slice(1) + "clip", cp = el("clipPath", { id: cid }), cr = el("rect", { x: 0, y: 0, width: W, height: H }); cp.appendChild(cr); svg.appendChild(cp);
+  const g = el("g", { "clip-path": `url(#${cid})` }); svg.appendChild(g);
+  o.series.forEach(s => { let d = "", pen = false; s.pts.forEach(p => { if (p[1] == null) { pen = false; return; } d += (pen ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(Math.min(o.y1, p[1])).toFixed(1); pen = true; }); g.appendChild(el("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round" })); });
+  const cur = el("line", { y1: M.t, y2: M.t + ih, stroke: "var(--text2)", "stroke-dasharray": "3 3", opacity: 0 }); svg.appendChild(cur);
+  const hv = el("line", { y1: M.t, y2: M.t + ih, stroke: "var(--muted)", opacity: 0 }); svg.appendChild(hv);
+  const ov = el("rect", { x: M.l, y: M.t, width: iw, height: ih, fill: "transparent" }); svg.appendChild(ov);
+  ov.addEventListener("mousemove", e => {
+    const b = ov.getBoundingClientRect(), xv = o.x0 + (e.clientX - b.left) / b.width * (o.x1 - o.x0);
+    hv.setAttribute("x1", X(xv)); hv.setAttribute("x2", X(xv)); hv.setAttribute("opacity", 1);
+    showTip(e, `<b>${o.xtip(xv)}</b>` + o.series.map(s => { let best = null; s.pts.forEach(p => { if (p[1] != null && (best == null || Math.abs(p[0] - xv) < Math.abs(best[0] - xv))) best = p; }); const far = best == null || Math.abs(best[0] - xv) > (o.x1 - o.x0) * 0.03; return `<br>${s.name}: ${far ? "no data here" : o.vf(best[1], best)}`; }).join(""));
+  });
+  ov.addEventListener("mouseleave", () => { hv.setAttribute("opacity", 0); hideTip(); });
+  if (o.reveal) replay.push(t => { const x = X(Math.min(o.x1, t)); cr.setAttribute("width", x + 1); cur.setAttribute("x1", x); cur.setAttribute("x2", x); cur.setAttribute("opacity", t >= o.x1 ? 0 : 1); });
+}
+const TMAXMIN = Math.ceil(Math.max(...R.map(r => r.tLoop)) / 60 / 20) * 20, tt = []; for (let t = 0; t <= TMAXMIN; t += 20) tt.push(t);
+const tx = { x0: 0, x1: TMAXMIN, xt: tt, xf: v => v === 0 ? "0 min" : v, xtip: v => `Minute ${fmt(v)}` };
+const tokMax = Math.ceil(Math.max(...R.flatMap(r => r.S.map(s => s.tok))) / 600) * 600, tokT = [0, 1, 2, 3, 4].map(i => tokMax * i / 4);
+const NMAX = Math.max(...R.map(r => r.N)), sx = { x0: 1, x1: NMAX, xt: [1, 20, 40, 60, 80, 100].filter(v => v <= NMAX), xf: v => v === 1 ? "step 1" : v, xtip: v => `Step ${Math.round(v)}` };
+const byT = f => R.map(r => ({ name: r.name, color: r.color, pts: r.S.map(s => [s.el / 60, f(s), s]) }));
+const byS = f => R.map(r => ({ name: r.name, color: r.color, pts: r.S.map(s => [s.s, f(s), s]) }));
+const byM = f => R.map(r => ({ name: r.name, color: r.color, pts: f(r).map((v, m) => [m + 0.5, v]) }));
+chart("#rAcc", { ...tx, y0: 70, y1: 100, yt: [70, 80, 90, 100], yf: v => v + "%", series: byT(s => s.acc * 100), vf: (v, p) => `${fmt(v, 1)}% (step ${p[2].s})`, reveal: true });
+chart("#rTok", { ...tx, y0: 0, y1: tokMax, yt: tokT, yf: v => fmt(v), series: byT(s => s.tok), vf: (v, p) => `${fmt(v)} tokens (step ${p[2].s})`, reveal: true });
+chart("#sAcc", { ...sx, y0: 70, y1: 100, yt: [70, 80, 90, 100], yf: v => v + "%", series: byS(s => s.acc * 100), vf: v => fmt(v, 1) + "%" });
+chart("#sTok", { ...sx, y0: 0, y1: tokMax, yt: tokT, yf: v => fmt(v), series: byS(s => s.tok), vf: v => fmt(v) + " tokens" });
+chart("#sMix", { ...sx, y0: 0, y1: 80, yt: [0, 20, 40, 60, 80], yf: v => v + "%", series: byS(s => s.mixed * 100), vf: v => fmt(v, 1) + "%" });
+const STMAX = 720;
+chart("#sTime", { ...sx, y0: 0, y1: STMAX, yt: [0, 180, 360, 540, 720], yf: v => v + " s", series: byS(s => s.st), vf: (v, p) => `${fmt(v)} s (rollouts ${fmt(p[2].ro)} s, update ${fmt(p[2].up)} s)` });
+$("#sTimeNote").textContent = `Step 1 of ${R[1].name} took ${fmt(R[1].S[0].st)} s and is clipped at ${STMAX} s`;
+chart("#gUtil", { ...tx, y0: 0, y1: 100, yt: [0, 25, 50, 75, 100], yf: v => v + "%", series: byM(r => r.util), vf: v => fmt(v) + "%" });
+chart("#gMem", { ...tx, y0: 0, y1: 300, yt: [0, 100, 200, 300], yf: v => v + " GB", series: byM(r => r.mem), vf: v => fmt(v) + " GB", cap: [286.5, "286.5 GB capacity"] });
+const rpmMax = Math.ceil(Math.max(...R.flatMap(r => r.rpm)) / 20) * 20;
+chart("#gRpm", { ...tx, y0: 0, y1: rpmMax, yt: [0, 1, 2, 3, 4].map(i => rpmMax * i / 4), yf: v => fmt(v), series: byM(r => r.rpm), vf: v => `${fmt(v, 1)} per GPU, ${fmt(v * 32)} on 32 GPUs` });
+
+/* ---- time budget: grouped horizontal bars ---- */
+(() => {
+  const svg = $("#gTime"), cats = [["Rollouts", r => r.tRoll], ["Updates", r => r.tUpd], ["Start-up, checkpoints, shutdown", r => r.tOther]], H = 220, l = 46, r0 = 60, top = 6, gh = 62, bh = 16;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img");
+  const mx = Math.ceil(Math.max(...R.flatMap(r => cats.map(c => c[1](r) / 60))) / 20) * 20, X = v => l + v / mx * (W - l - r0);
+  for (let v = 0; v <= mx; v += 20) { svg.appendChild(el("line", { x1: X(v), x2: X(v), y1: top, y2: top + cats.length * gh, stroke: "var(--grid)" })); svg.appendChild(el("text", { x: X(v), y: H - 8, "text-anchor": "middle" }, v === 0 ? "0 min" : v)); }
+  cats.forEach((c, i) => {
+    const y = top + i * gh; svg.appendChild(el("text", { x: l, y: y + 12, class: "lab" }, c[0]));
+    R.forEach((r, k) => { const v = c[1](r) / 60, yy = y + 18 + k * (bh + 2), w = Math.max(1, X(v) - l);
+      const bar = el("path", { d: `M${l} ${yy}H${l + w - Math.min(4, w)}q${Math.min(4, w)} 0 ${Math.min(4, w)} 4v${bh - 8}q0 4 -${Math.min(4, w)} 4H${l}Z`, fill: r.color }); svg.appendChild(bar);
+      svg.appendChild(el("text", { x: l + w + 6, y: yy + bh - 4 }, `${fmt(v, 1)} (${pct(c[1](r) / r.J.elapsed_s, 0)})`));
+      hover(bar, `<b>${r.name}: ${c[0]}</b><br>${fmt(v, 1)} min, ${pct(c[1](r) / r.J.elapsed_s, 0)} of the ${fmt(r.J.elapsed_s / 60)}-minute job`); });
+  });
+})();
+$("#gpuSub").textContent = `Each step ran on all 32 GPUs: every GPU wrote 32 answers, then computed gradients on them. GPU readings cover ${R[0].measured} for ${R[0].name} and ${R[1].measured} for ${R[1].name}, so the first run's usage numbers rest on a smaller sample.`;
+$("#gpuTbl").innerHTML = head +
+  row("GPUs measured", r => r.measured) + row("Average utilisation", r => fmt(r.utilAvg) + "%") +
+  row("Utilisation in rollouts / updates", r => `${fmt(r.G.util_rollout)}% / ${fmt(r.G.util_update)}%`) +
+  row("Peak memory on any measured GPU", r => `${fmt(r.memPeak)} GB (${pct(r.memPeak / 286.5, 0)})`) + row("Average memory", r => fmt(r.memAvg) + " GB") +
+  row("Average power per GPU", r => fmt(r.G.power_avg_w) + " W") + row("Job time", r => fmt(r.J.elapsed_s / 60) + " min") + row("GPU-hours", r => fmt(r.gpuH, 1)) +
+  row("Answers per GPU per minute, average", r => fmt(r.N * r.perGpu / (r.tLoop / 60), 1)) + row("Tokens generated", r => fmt(r.tokens / 1e6, 1) + "M") +
+  row("Share of step time in updates", r => pct(r.tUpd / (r.tRoll + r.tUpd), 0));
+
+/* ---- benchmark dumbbells ---- */
+const TYPES = [["overall", "Overall"], ["run_rate", "Run rate"], ["chase_rate", "Chase rate"], ["milestone", "Milestone"]];
+function dumbbell(id, key, x0, x1, xt, xf, vf) {
+  const svg = $(id), rh = 28, gh = R.length * rh + 14, H = 10 + TYPES.length * gh + 22, l = 86, r0 = 62; svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img");
+  const X = v => l + (v - x0) / (x1 - x0) * (W - l - r0);
+  xt.forEach(v => { svg.appendChild(el("line", { x1: X(v), x2: X(v), y1: 6, y2: H - 26, stroke: "var(--grid)" })); svg.appendChild(el("text", { x: X(v), y: H - 8, "text-anchor": "middle" }, xf(v))); });
+  TYPES.forEach(([t, name], i) => {
+    const y0 = 10 + i * gh; svg.appendChild(el("text", { x: l - 10, y: y0 + gh / 2, "text-anchor": "end", class: "lab" }, name));
+    R.forEach((r, k) => { const y = y0 + 12 + k * rh, b = r.B[t][key], f = r.F[t][key];
+      svg.appendChild(el("line", { x1: X(b), x2: X(f), y1: y, y2: y, stroke: "var(--muted)", "stroke-width": 2 }));
+      svg.appendChild(el("circle", { cx: X(b), cy: y, r: 5.5, fill: "var(--base)", stroke: "var(--surface)", "stroke-width": 2 }));
+      svg.appendChild(el("circle", { cx: X(f), cy: y, r: 5.5, fill: r.color, stroke: "var(--surface)", "stroke-width": 2 }));
+      svg.appendChild(el("text", { x: X(f) + 9, y: f >= b ? y + 4 : y - 6, "text-anchor": "start" }, vf(f)));
+      const hit = el("rect", { x: l, y: y - rh / 2, width: W - l - r0, height: rh, fill: "transparent" }); svg.appendChild(hit);
+      hover(hit, `<b>${r.name}, ${name}</b><br>Before ${vf(b)}<br>After ${vf(f)}`); });
+  });
+}
+const accLo = Math.floor((Math.min(...R.flatMap(r => TYPES.flatMap(([t]) => [r.B[t].accuracy, r.F[t].accuracy]))) - 0.005) * 25) / 25, accT = []; for (let v = accLo; v <= 1.0001; v += 0.04) accT.push(+v.toFixed(2));
+dumbbell("#bAcc", "accuracy", accT[0], 1, accT, v => fmt(v * 100) + "%", v => fmt(v * 100, 2) + "%");
+dumbbell("#bTok", "mean_tokens", 0, 3000, [0, 1000, 2000, 3000], v => fmt(v), v => fmt(v));
+$("#benchTbl").innerHTML = `<tr><th>Question type</th>${R.map(r => `<th>${r.name} before</th><th>after</th><th>change</th>`).join("")}</tr>` +
+  TYPES.map(([t, name]) => `<tr><td>${name}</td>${R.map(r => `<td>${fmt(r.B[t].accuracy * 100, 2)}%</td><td>${fmt(r.F[t].accuracy * 100, 2)}%</td><td>${sign((r.F[t].accuracy - r.B[t].accuracy) * 100)}</td>`).join("")}</tr>`).join("") +
+  `<tr><td>At least 1 of 4 samples correct</td>${R.map(r => `<td>${pct(r.B.overall["pass@4"], 2)}</td><td>${pct(r.F.overall["pass@4"], 2)}</td><td>${sign((r.F.overall["pass@4"] - r.B.overall["pass@4"]) * 100)}</td>`).join("")}</tr>` +
+  `<tr><td>Answers cut off at 4,096 tokens</td>${R.map(r => `<td>${pct(r.B.overall.truncated_rate, 2)}</td><td>${pct(r.F.overall.truncated_rate, 2)}</td><td>${sign((r.F.overall.truncated_rate - r.B.overall.truncated_rate) * 100)}</td>`).join("")}</tr>`;
+
+/* ---- insights ---- */
+const li = a => a.map(x => `<li>${x}</li>`).join(""), [a, b] = R;
+const slipped = R.flatMap(r => TYPES.filter(([t]) => t !== "overall" && r.F[t].accuracy < r.B[t].accuracy).map(([t, name]) => `${name.toLowerCase()} questions for ${r.name} (${fmt(r.B[t].accuracy * 100, 2)}% to ${fmt(r.F[t].accuracy * 100, 2)}%)`));
+$("#insAgree").innerHTML = li([
+  `<b>Both models ended near 99%.</b> ${a.name} finished at ${fmt(a.F.overall.accuracy * 100, 2)}% and ${b.name} at ${fmt(b.F.overall.accuracy * 100, 2)}% on the same 600 questions.`,
+  `<b>Both learned to answer briefly.</b> Benchmark answers shrank by ${fmt(a.tokCut * 100)}% and ${fmt(b.tokCut * 100)}%, to ${fmt(a.F.overall.mean_tokens)} and ${fmt(b.F.overall.mean_tokens)} tokens. No answer was cut off after training.`,
+  `<b>Both converged early.</b> Rollout accuracy passed 98.5% at step ${a.conv.s} and step ${b.conv.s}. Answer length came within 25% of its late-run level at step ${a.floor.s} and step ${b.floor.s}; the steps after that took ${pct(a.afterFloor / a.J.elapsed_s, 0)} and ${pct(b.afterFloor / b.J.elapsed_s, 0)} of each job.`,
+  `<b>Updates, not rollouts, took most of the time.</b> ${pct(a.tUpd / (a.tRoll + a.tUpd), 0)} and ${pct(b.tUpd / (b.tRoll + b.tUpd), 0)} of step time went to updates.`,
+  `<b>GPUs ran at about 70%.</b> Measured utilisation averaged ${fmt(a.utilAvg)}% and ${fmt(b.utilAvg)}%.`]);
+$("#insDiff").innerHTML = li([
+  `<b>${b.name} gained more because it started lower.</b> ${sign(b.dAcc)} points from a ${fmt(b.B.overall.accuracy * 100, 2)}% base, against ${sign(a.dAcc)} points from ${fmt(a.B.overall.accuracy * 100, 2)}%. Its base model was weakest on chase-rate questions (${fmt(b.B.chase_rate.accuracy * 100, 2)}%), which rose to ${fmt(b.F.chase_rate.accuracy * 100, 2)}%.`,
+  `<b>${b.name} thinks much longer before training.</b> Its base answers averaged ${fmt(b.B.overall.mean_tokens)} tokens against ${fmt(a.B.overall.mean_tokens)}. With the first run's 1,024-token cap, a smoke test saw 88% of its answers cut off, so its cap was raised to ${fmt(b.A.max_new_tokens)}.`,
+  `<b>${b.name} cost about twice the GPU time for fewer rollouts.</b> ${fmt(b.gpuH, 1)} GPU-hours for ${fmt(b.N * b.perStep)} rollouts, against ${fmt(a.gpuH, 1)} for ${fmt(a.N * a.perStep)}. It generated ${fmt(b.tokens / 1e6, 1)}M tokens against ${fmt(a.tokens / 1e6, 1)}M, and its first step alone took ${fmt(b.S[0].st / 60)} minutes.`,
+  `<b>Far fewer weights were trained on ${b.name}.</b> ${b.trainable} against ${a.trainable}, because its routed experts cannot take LoRA in this setup. The adapter is ${b.adapterMb} MB against ${a.adapterMb} MB.`,
+  `<b>Memory headroom.</b> ${b.name} peaked at ${fmt(b.memPeak)} GB of 286.5 GB; ${a.name} peaked at ${fmt(a.memPeak)} GB on the GPUs that were measured.`]);
+$("#insWatch").innerHTML = li([
+  `<b>Some question types slipped:</b> ${slipped.length ? slipped.join("; ") : "none"}. For ${a.name}, one chase-rate question is now wrong in all 4 samples; for ${b.name}, 3 milestone questions are.`,
+  `<b>The benchmark is close to its ceiling.</b> Both models score about 99%, so it can no longer separate them or show further gains.`,
+  `<b>Very short reasoning may not transfer.</b> The length bonus pushed both models to about 100 to 150 tokens. That works on these three question types; it has not been tested on harder or different questions.`,
+  `<b>No confidence intervals were computed</b> for the accuracy changes, and only the final adapter of each run was benchmarked.`,
+  `<b>${b.name} nearly ran out of GPU memory</b> in training, and its first benchmark job did run out and had to be rerun with a smaller batch.`]);
+$("#insNext").innerHTML = li([
+  `<b>Stop earlier.</b> Ending at the step where answer length levelled off (step ${a.floor.s} and step ${b.floor.s}) would have used about ${fmt(a.gpuHFloor)} GPU-hours instead of ${fmt(a.gpuH)} for ${a.name}, and about ${fmt(b.gpuHFloor)} instead of ${fmt(b.gpuH)} for ${b.name}. Benchmark accuracy at those steps has not been measured.`,
+  `<b>Benchmark the saved checkpoints.</b> Checkpoints exist every 10 steps; scoring them would show the earliest step that already reaches the final accuracy.`,
+  `<b>Speed up the update.</b> It is the larger share of every step. Larger or length-bucketed update batches would help most on ${b.name}, where the batch was cut to ${b.A.train_batch} sequences for memory.`,
+  `<b>Use a harder test.</b> Add the other three question types and questions the base models get wrong, so there is room to measure improvement.`,
+  `<b>Log every GPU from the start.</b> Per-node logging was added for the second run; the first run has readings for 4 GPUs only.`]);
+$("#caveat").textContent = `How to read this: the two runs are two recipes, not a controlled experiment. They differ in answer cap, length penalty, step count, update batch and which weights were trained. GPU readings are 15 s apart, and for ${a.name} they cover one node of eight.`;
+
+/* ---- jobs and locations ---- */
+$("#jobs").innerHTML = `<tr><th class="l">Run</th><th class="l">Job</th><th class="l">What it did</th><th>Nodes</th><th>Duration</th><th class="l">Outcome</th></tr>` +
+  DATA.jobs.map(j => `<tr><td>${sw(R[j[0]])} ${R[j[0]].name}</td><td class="l">${j[1]}</td><td class="l">${j[2]}</td><td>${j[3]}</td><td>${j[4]}</td><td class="l ${j[6] ? "ok" : "fail"}">${j[5]}</td></tr>`).join("");
+$("#where").innerHTML = `<tr><th>Item</th>${R.map(r => `<th class="l">${r.name}</th>`).join("")}</tr>` +
+  [["Adapter on Lustre (/lustre/fsw/general_sa/bbalakreshna/...)", r => r.lustre], ["Hugging Face repo (private)", r => r.hf], ["W&B project / run", r => r.wb], ["Adapter size", r => r.adapterMb + " MB"]]
+    .map(x => `<tr><td>${x[0]}</td>${R.map(r => `<td class="l">${x[1](r)}</td>`).join("")}</tr>`).join("");
+$("#stepTbl").innerHTML = `<tr><th>Step</th>${R.map(r => `<th>${r.name} accuracy</th><th>tokens</th><th>step time (s)</th><th>minute</th>`).join("")}</tr>` +
+  Array.from({ length: NMAX }, (_, i) => `<tr><td>${i + 1}</td>${R.map(r => { const s = r.S[i]; return s ? `<td>${pct(s.acc)}</td><td>${fmt(s.tok)}</td><td>${fmt(s.st)}</td><td>${fmt(s.el / 60, 1)}</td>` : "<td></td><td></td><td></td><td></td>"; }).join("")}</tr>`).join("");
+
+/* ---- replay ---- */
+const lanes = R.map(r => {
+  const d = document.createElement("div"); d.className = "lane";
+  d.innerHTML = `<div class="nm">${sw(r)}${r.name}</div><div class="st"></div><div class="cells">${"<i></i>".repeat(32)}</div><div class="ro"></div>`;
+  $("#race").appendChild(d);
+  return { r, st: d.querySelector(".st"), cells: [...d.querySelectorAll(".cells i")], ro: d.querySelector(".ro") };
+});
+const TEND = TMAXMIN; $("#scrub").max = TEND; $("#scrub").value = TEND;
+let cur = TEND, playing = false, last = 0;
+function draw(t) {
+  cur = Math.max(0, Math.min(TEND, t)); replay.forEach(f => f(cur)); $("#scrub").value = cur; $("#clock").textContent = `Minute ${fmt(cur, 1)} of ${TEND}`;
+  lanes.forEach(L => {
+    const r = L.r, sec = cur * 60, done = sec >= r.tLoop, s = done ? r.S[r.N - 1] : r.S.find(x => x.el > sec) || r.S[r.N - 1];
+    const seen = done ? s : (r.S[s.s - 2] || null), inRoll = !done && sec < s.el - s.st + s.ro;
+    L.cells.forEach(c => { c.style.background = done ? "var(--track)" : r.color; c.style.opacity = done ? 1 : inRoll ? 1 : 0.35; });
+    L.st.innerHTML = done ? `<b>Finished</b> at minute ${fmt(r.tLoop / 60, 1)} after ${r.N} steps.` : inRoll ? `<b>Step ${s.s}: rollouts.</b> 32 GPUs are writing 1,024 answers.` : `<b>Step ${s.s}: update.</b> 32 GPUs are computing gradients.`;
+    L.ro.innerHTML = [["Steps done", seen ? seen.s : 0], ["Accuracy", seen ? pct(seen.acc) : "none yet"], ["Tokens", seen ? fmt(seen.tok) : "none yet"], ["Answers", fmt((seen ? seen.s : 0) * r.perStep)]].map(x => `<div><div class="k">${x[0]}</div><div class="v">${x[1]}</div></div>`).join("");
+  });
+}
+function tick(t) { if (!playing) return; const dt = Math.min(100, t - last); last = t; const c = cur + dt / 1000 * 8 * +$("#speed").value; if (c >= TEND) { playing = false; $("#play").textContent = "Replay"; draw(TEND); return; } draw(c); requestAnimationFrame(tick); }
+$("#play").addEventListener("click", () => { if (playing) { playing = false; $("#play").textContent = "Resume"; return; } if (cur >= TEND) cur = 0; playing = true; $("#play").textContent = "Pause"; last = performance.now(); requestAnimationFrame(tick); });
+$("#scrub").addEventListener("input", e => { playing = false; $("#play").textContent = "Play"; draw(+e.target.value); });
+draw(TEND);
+</script>
+</body>
+</html>
