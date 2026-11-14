@@ -29,6 +29,7 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | 9 | 2026-11-12 | Rhea | Speculative decoding with Dynamo + SGLang | Qwen3.8-27B | Probe of public Dynamo SGLang 1.5.1 image | 1 node, 5 short jobs | No server started: image has no GPU kernels for Vera Rubin. No speed numbers | Stopped, cleaned up |
 | 10 | 2026-11-13 | Rhea | Cricket RLVR (reward = exact answer, short-answer bonus) | Qwen3.8-27B | LoRA r32 from base, group-baseline policy gradient, 100 steps, 102,400 rollouts | 32 GPUs, 1.33 h training (jobs 39000, 39066, 39067) | Accuracy 97.00% to 99.17%; tokens 734 to 109 (-85%); truncation 0.83% to 0 | Done |
 | 11 | 2026-11-13 | Rhea | Cricket RLVR on a mixture-of-experts model | Qwen3.6-35B-A3B | LoRA r32 (attention + shared-expert MLP, 38.3M params), 60 steps, 61,440 rollouts, 4,096-token cap | 32 GPUs, 2.65 h training (jobs 40421, 47560, 47561; first benchmark 40423 ran out of GPU memory) | Accuracy 93.62% to 98.96%; tokens 2,177 to 151 (-93%); truncation 3.25% to 0; milestone 99.00% to 97.88% | Done |
+| 12 | 2026-11-14 | Rhea | Cricket RLVR rerun with GPU usage logged on all 32 GPUs | Qwen3.8-27B | Same recipe as row 10 but 120 steps (script default), 122,880 rollouts; run `cricket-rlvr-1114` | 32 GPUs, 1.76 h training (jobs 47941, 47943, 47944); avg utilisation 73% (65-78% per GPU), peak memory 260 of 286.5 GB | Accuracy 97.00% to 99.96%; tokens 734 to 119 (-84%); truncation 0.83% to 0; adapter in private HF repo `Balab2021/Qwen3.8-27B-Cricket-Reasoning-RLVR-120steps` (job 48773) | Done |
 
 ## Rhea job log
 
@@ -65,6 +66,7 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | `Qwen3.8-27B-Cricket-Reasoning-Rhea-LoRA` | Adapter | Project 8 | Private |
 | `Qwen3.8-27B-Cricket-Reasoning-RLVR` | Adapter | Project 10 | Private |
 | `Qwen3.6-35B-A3B-Cricket-Reasoning-RLVR` | Adapter | Project 11 | Private |
+| `Qwen3.8-27B-Cricket-Reasoning-RLVR-120steps` | Adapter | Project 12 | Private |
 
 ## Reports and runbooks
 
@@ -75,6 +77,8 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | Rhea RLVR run and GPU usage report (interactive) | `rhea/cricket-rlvr-report.html` |
 | Rhea Qwen3.6 RLVR before/after and 32-GPU usage report (interactive) | `rhea/qwen36-rlvr-report.html` |
 | Both RLVR runs end to end (interactive) | `rhea/rlvr-two-runs-report.html` |
+| Rhea Qwen3.8 RLVR rerun, all 32 GPUs measured (interactive) | `rhea/qwen38-rlvr-allgpu-report.html` |
+| Dense vs mixture-of-experts RLVR comparison: architectures, benchmark, minute-by-minute GPU usage (interactive) | `rhea/rlvr-moe-vs-dense-report.html` |
 | Rhea runbook | `rhea/README.md` |
 | Hecate cricket runbook | `cricket/README.md` |
 | FinNews experiment table | `pulled/experiments_summary.md` |
@@ -90,5 +94,6 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | `datasets/CricketData-T20-Reasoning-Qwen3.8-Full` | 2.1 GB |
 | `cricket-rhea/runs/cricket-lora-full-1111` (adapter, 3 checkpoints, benchmark records) | not measured |
 | `cricket-rhea/runs/cricket-rlvr-1113` (RLVR adapter 870 MB, checkpoints, benchmark records) | not measured |
+| `cricket-rhea/runs/cricket-rlvr-1114` (rerun adapter, checkpoints, benchmark records, GPU logs) | not measured |
 | `cricket-rhea/runs/qwen36-rlvr-1113` (RLVR adapter 153 MB, checkpoints, benchmark records, GPU logs) and `models/Qwen3.6-35B-A3B` (67 GB) | not measured |
 | `cache/enroot-cache` (PyTorch image layers) | 20 GB |
