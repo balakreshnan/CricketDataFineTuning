@@ -30,6 +30,7 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | 10 | 2026-11-13 | Rhea | Cricket RLVR (reward = exact answer, short-answer bonus) | Qwen3.8-27B | LoRA r32 from base, group-baseline policy gradient, 100 steps, 102,400 rollouts | 32 GPUs, 1.33 h training (jobs 39000, 39066, 39067) | Accuracy 97.00% to 99.17%; tokens 734 to 109 (-85%); truncation 0.83% to 0 | Done |
 | 11 | 2026-11-13 | Rhea | Cricket RLVR on a mixture-of-experts model | Qwen3.6-35B-A3B | LoRA r32 (attention + shared-expert MLP, 38.3M params), 60 steps, 61,440 rollouts, 4,096-token cap | 32 GPUs, 2.65 h training (jobs 40421, 47560, 47561; first benchmark 40423 ran out of GPU memory) | Accuracy 93.62% to 98.96%; tokens 2,177 to 151 (-93%); truncation 3.25% to 0; milestone 99.00% to 97.88% | Done |
 | 12 | 2026-11-14 | Rhea | Cricket RLVR rerun with GPU usage logged on all 32 GPUs | Qwen3.8-27B | Same recipe as row 10 but 120 steps (script default), 122,880 rollouts; run `cricket-rlvr-1114` | 32 GPUs, 1.76 h training (jobs 47941, 47943, 47944); avg utilisation 73% (65-78% per GPU), peak memory 260 of 286.5 GB | Accuracy 97.00% to 99.96%; tokens 734 to 119 (-84%); truncation 0.83% to 0; adapter in private HF repo `Balab2021/Qwen3.8-27B-Cricket-Reasoning-RLVR-120steps` (job 48773) | Done |
+| 13 | 2026-11-23 | Rhea | Speculative decoding benchmark (`rhea/specdec/`), run `specdec-qwen38-rlvr-1123` | Target Qwen3.8-27B + RLVR adapter; drafts Qwen3.5-0.8B/2B/4B/9B (base) | Own decoding loop with cache snapshots (transformers refuses assisted generation for these stateful models); cuDNN attention kernel off; 200 questions, 2/4/8 draft tokens per round | 8 GPUs, 40 min (job 120765); set-up jobs 120135-120720 | Slower than target alone: 36 tok/s alone vs 17-25 tok/s with a draft (best 0.70x, Qwen3.5-2B, 2 tokens per round); acceptance 17-57%; accuracy 100% everywhere | Done |
 
 ## Rhea job log
 
@@ -67,6 +68,7 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | `Qwen3.8-27B-Cricket-Reasoning-RLVR` | Adapter | Project 10 | Private |
 | `Qwen3.6-35B-A3B-Cricket-Reasoning-RLVR` | Adapter | Project 11 | Private |
 | `Qwen3.8-27B-Cricket-Reasoning-RLVR-120steps` | Adapter | Project 12 | Private |
+| `Cricket-SpecDec-Rhea` | Dataset (benchmark results) | Project 13 | Private |
 
 ## Reports and runbooks
 
