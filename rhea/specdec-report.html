@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speculative Decoding Results</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f6f5f2; --surface:#fcfcfb; --border:#e3e1da; --grid:#e9e7e0;
+  --text:#0b0b0b; --text2:#52514e; --muted:#84827a; --track:#eceae4;
+  --s1:#2a78d6; --s2:#eb6834; --base:#8a887f;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#111110; --surface:#1a1a19; --border:#33322f; --grid:#2a2a27;
+    --text:#f0efec; --text2:#c3c2b7; --muted:#8f8e85; --track:#2a2a27;
+    --s1:#3987e5; --s2:#d95926; --base:#9a988f;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111110; --surface:#1a1a19; --border:#33322f; --grid:#2a2a27;
+  --text:#f0efec; --text2:#c3c2b7; --muted:#8f8e85; --track:#2a2a27;
+  --s1:#3987e5; --s2:#d95926; --base:#9a988f;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1080px;margin:0 auto;padding:28px 16px 64px}
+h1{font-size:26px;line-height:1.2;margin:0 0 6px}
+h2{font-size:18px;margin:38px 0 4px}
+h3{font-size:14px;margin:0 0 2px;font-weight:600}
+p{margin:6px 0}
+.sub{color:var(--text2);max-width:78ch}
+.note{color:var(--muted);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;min-width:0}
+.grid{display:grid;gap:12px}
+.two{grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))}
+.tiles{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:12px}
+.tile .k{color:var(--text2);font-size:13px}
+.tile .v{font-size:24px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.25}
+.tile .v small{font-size:14px;font-weight:500;color:var(--muted)}
+.tile .d{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.runhead{display:flex;align-items:center;gap:8px;font-weight:600;margin:18px 0 0}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;flex:none}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--text2);margin:6px 0 2px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px}
+.legend i.dot{border-radius:50%;width:10px;height:10px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{fill:var(--text2);font-size:12px;font-variant-numeric:tabular-nums}
+svg .lab{fill:var(--text);font-size:13px}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:10px 0 4px}
+button,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer}
+button.primary{background:var(--s1);border-color:var(--s1);color:#fff;min-width:84px}
+button[aria-pressed="true"]{border-color:var(--text);font-weight:600}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--s1);outline-offset:2px}
+input[type=range]{flex:1;min-width:160px;accent-color:var(--s1)}
+#tip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);display:none;z-index:9;font-variant-numeric:tabular-nums;max-width:290px}
+#tip b{font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;vertical-align:top}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--text2);font-weight:600}
+td.l,th.l{text-align:left}
+.scroll{overflow-x:auto}
+.tall{max-height:420px;overflow-y:auto}
+ul.ins{padding-left:20px;margin:8px 0}
+ul.ins li{margin:8px 0;max-width:84ch}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--text2);font-size:13px}
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+.flow div{border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--surface)}
+.flow b{display:block;font-size:13px}
+.flow span{font-size:12.5px;color:var(--text2)}
+.flow .n{font-size:12px;color:var(--muted)}
+.race{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:12px;margin:10px 0}
+.lane{border:1px solid var(--border);border-radius:8px;padding:10px}
+.lane .nm{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+.lane .st{font-size:13px;color:var(--text2);min-height:20px;margin:4px 0 8px}
+.cells{display:grid;grid-template-columns:repeat(16,1fr);gap:3px}
+.cells i{display:block;height:16px;border-radius:3px;background:var(--track);transition:opacity .12s}
+.ro{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.ro div{border:1px solid var(--border);border-radius:6px;padding:4px 8px}
+.ro .k{font-size:11.5px;color:var(--text2)}
+.ro .v{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.ok{color:var(--text2)} .fail{font-weight:600}
+/* architecture diagrams */
+.arch{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.blk{border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;background:var(--bg)}
+.blk b{display:block}
+.blk small{color:var(--text2);font-size:12px}
+.blk.lora{border:2px dashed var(--c)}
+.tag{display:inline-block;font-size:11.5px;border-radius:999px;padding:0 8px;border:1px solid var(--border);color:var(--text2);margin-left:6px;vertical-align:1px}
+.tag.t{border-color:var(--c);color:var(--text)}
+.arrow{text-align:center;color:var(--muted);font-size:12px;line-height:1}
+.layerbox{border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.layerbox>.cap{font-size:12px;color:var(--text2)}
+.mlpbar{height:44px;border-radius:6px;background:var(--c);opacity:.25;margin-top:6px;transition:opacity .35s}
+.mlpbar.on{opacity:.95}
+.experts{display:grid;grid-template-columns:repeat(32,1fr);gap:2px;margin-top:6px}
+.experts i{display:block;aspect-ratio:1;border-radius:2px;background:var(--track);transition:background .25s}
+.experts i.on{background:var(--c)}
+.shared{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--text2)}
+.shared i{display:inline-block;width:44px;height:14px;border-radius:3px;background:var(--c);opacity:.3;transition:opacity .35s}
+.shared i.on{opacity:.95}
+#archs{align-items:start}
+.tok{font-size:12px;color:var(--text2);min-height:18px}
+
+:root{--s3:#1baf7a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--s3:#27b885}}
+:root[data-theme="dark"]{--s3:#27b885}
+.toks{display:grid;grid-template-columns:repeat(40,1fr);gap:2px;margin-top:8px}
+.toks i{display:block;aspect-ratio:1;border-radius:2px;background:var(--track)}
+.toks i.t{background:var(--base)}
+.toks i.a{background:var(--c)}
+.toks i.g{background:transparent;outline:1.5px dashed var(--c);outline-offset:-1.5px}
+.verdict{border-left:4px solid var(--s2);padding:10px 14px;background:var(--surface);border-radius:0 8px 8px 0;margin-top:14px;max-width:84ch}
+
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+.steps>div{border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--surface);transition:border-color .25s,box-shadow .25s}
+.steps>div.on{border-color:var(--s1);box-shadow:0 0 0 2px var(--s1) inset}
+.steps b{display:block;font-size:13px}
+.steps span{font-size:12.5px;color:var(--text2)}
+.steps .who{font-size:11.5px;color:var(--muted);margin-top:4px}
+.exrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:12px;min-height:34px}
+.exrow .lbl{font-size:12.5px;color:var(--text2);margin-right:4px}
+.tk{font:12px/1 ui-monospace,Menlo,Consolas,monospace;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);transition:all .25s}
+.tk.p{background:var(--track)}
+.tk.g{border-style:dashed;border-color:var(--s1)}
+.tk.a{background:var(--s1);border-color:var(--s1);color:#fff}
+.tk.r{border-color:var(--s2);color:var(--muted);text-decoration:line-through}
+.tk.t{background:var(--base);border-color:var(--base);color:#fff}
+.tk.x{opacity:.3;text-decoration:line-through}
+.exnote{font-size:13px;color:var(--text2);min-height:38px;margin-top:8px}
+.stack{display:grid;gap:2px;margin:8px 0;grid-auto-flow:column;grid-template-rows:repeat(4,auto)}
+.stack i{display:block;height:10px;border-radius:2px;background:var(--track);transition:background .08s}
+.stack i.f{outline:1.5px solid var(--muted);outline-offset:-1.5px}
+.stack i.on{background:var(--c)}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+.stat div{border:1px solid var(--border);border-radius:6px;padding:4px 8px}
+.stat .k{font-size:11.5px;color:var(--text2)}
+.stat .v{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<main>
+<h1>Speculative decoding on Rhea: does a small draft model make Qwen3.8-27B faster?</h1>
+<p class="sub" id="lead"></p>
+<div class="verdict" id="verdict"></div>
+<div class="grid tiles" id="tiles"></div>
+
+
+<h2>Architecture: how the pieces fit together</h2>
+<p class="sub">Two models sit on the same GPU and share one tokenizer. The draft writes guesses, the target checks them, and saved copies of each model's cache make it possible to undo a rejected round. The animation steps through one example round with 4 guesses, of which the third is rejected. Click a step to stop on it.</p>
+<div class="card">
+  <div class="controls"><button id="archPlay">Pause</button><span class="note" id="archStep"></span></div>
+  <div class="steps" id="steps"></div>
+  <div class="exrow" id="exrow"></div>
+  <div class="exnote" id="exnote"></div>
+  <div class="legend"><span><i style="background:var(--track)"></i>Prompt</span><span><i style="background:transparent;outline:1.5px dashed var(--s1);outline-offset:-1.5px"></i>Draft guess</span><span><i style="background:var(--s1)"></i>Guess accepted</span><span><i style="background:transparent;outline:1.5px solid var(--s2);outline-offset:-1.5px"></i>Guess rejected (struck through)</span><span><i style="background:var(--base)"></i>Token written by the target</span></div>
+</div>
+<div class="card" style="margin-top:12px">
+  <h3>One pass through each model, layer by layer</h3>
+  <p class="note" id="stackNote"></p>
+  <div class="grid two" id="stacks" style="align-items:start;margin-top:8px"></div>
+  <div class="legend"><span><i style="background:var(--track)"></i>Linear-attention layer (keeps a running state)</span><span><i style="background:var(--track);outline:1.5px solid var(--muted);outline-offset:-1.5px"></i>Full-attention layer (every fourth)</span><span><i style="background:var(--s1)"></i>Where the token is now</span></div>
+  <p class="note">Each column is one group of four layers, read top to bottom, then left to right. The draft shown is the one chosen in the replay further down.</p>
+</div>
+<div class="card" style="margin-top:12px"><h3>The two models side by side</h3><div class="scroll"><table id="archTbl"></table></div></div>
+
+<h2>How speculative decoding works, and a replay of the race</h2>
+<p class="sub">A small draft model guesses the next few tokens. The large target model checks all the guesses in one pass, keeps the ones it agrees with, and supplies the next token itself. The answer is always the target's; only the speed changes. The replay below is a simulation built from this run's measurements for the chosen configuration: the measured share of accepted guesses and the estimated time of one draft pass and one checking round.</p>
+<div class="card">
+  <div class="controls">
+    <button class="primary" id="play">Play</button>
+    <label class="note">Draft <select id="selDraft"></select></label>
+    <label class="note">Guesses per round <select id="selGamma"></select></label>
+    <label class="note">Speed <select id="speed"><option value="0.25">0.25x</option><option value="0.5" selected>0.5x</option><option value="1">1x</option></select></label>
+    <span class="note" id="clock"></span>
+  </div>
+  <div class="race" id="race"></div>
+  <div class="legend"><span><i style="background:var(--base)"></i>Token written by the target</span><span><i style="background:var(--s1)"></i>Draft guess the target accepted</span><span><i style="background:transparent;outline:1.5px dashed var(--s1);outline-offset:-1.5px"></i>Draft guess waiting to be checked</span></div>
+  <p class="note" id="simNote"></p>
+</div>
+
+<h2>Speed: every draft made it slower</h2>
+<p class="sub" id="speedSub"></p>
+<div class="grid two">
+  <div class="card"><h3>Tokens per second</h3><p class="note">Higher is better. The dashed line is the target alone.</p><svg id="cSpeed"></svg></div>
+  <div class="card"><h3>Seconds per answer</h3><p class="note">Lower is better. The dashed line is the target alone.</p><svg id="cLat"></svg></div>
+</div>
+<div class="legend" id="lgGamma"></div>
+
+<h2>Acceptance: how often the draft guessed right</h2>
+<p class="sub">A guess counts as accepted when the target keeps it. After the first rejected guess in a round, the rest of that round's guesses are thrown away, so longer rounds waste more.</p>
+<div class="grid two">
+  <div class="card"><h3>Share of draft guesses accepted</h3><svg id="cAcc"></svg></div>
+  <div class="card"><h3>Tokens gained per target pass</h3><p class="note">1.0 means no gain. The most possible is guesses per round plus one.</p><svg id="cTpp"></svg></div>
+</div>
+
+<h2>Why it is slower: where the time per answer goes</h2>
+<p class="sub" id="whySub"></p>
+<div class="card"><h3>Estimated time per answer, split by model</h3><p class="note">Estimated by fitting answer time to the number of target rounds and draft passes, once per draft across its three round sizes. The target part includes checking several tokens at once and copying both caches for rollback.</p><svg id="cWhy"></svg>
+  <div class="legend"><span><i style="background:var(--base)"></i>Target passes</span><span><i style="background:var(--s2)"></i>Draft passes</span></div></div>
+<div class="card" style="margin-top:12px"><div class="scroll"><table id="passTbl"></table></div></div>
+
+<h2>Question by question</h2>
+<p class="sub">Each question was answered once by the target alone and once per configuration. This shows, for the configuration chosen in the replay above, how its speed compared with the target alone on each of the 200 questions.</p>
+<div class="grid two">
+  <div class="card"><h3 id="histH"></h3><p class="note" id="histNote"></p><svg id="cHist"></svg></div>
+  <div class="card"><h3>By question type, same configuration</h3><div class="scroll"><table id="qtTbl"></table></div></div>
+</div>
+
+<h2>GPU usage, minute by minute</h2>
+<p class="sub" id="gpuSub"></p>
+<div class="grid two">
+  <div class="card"><h3>GPU utilisation</h3><p class="note">Percent busy, mean per node per minute</p><svg id="gUtil"></svg></div>
+  <div class="card"><h3>GPU memory in use</h3><p class="note">Mean per GPU per node, with the 286.5 GB capacity line</p><svg id="gMem"></svg></div>
+</div>
+<div class="legend" id="lgNode"></div>
+<div class="card" style="margin-top:12px"><h3>Every GPU, every minute: percent busy</h3><p class="note">One row per GPU, one column per minute. Darker means busier. Hover for the reading.</p><svg id="gHeat"></svg></div>
+
+<h2>Two problems found on the way</h2>
+<div class="grid two">
+  <div class="card"><h3>The library refuses these models</h3><ul class="ins" id="f1"></ul></div>
+  <div class="card"><h3>A hidden slowdown in the attention kernel</h3><ul class="ins" id="f2"></ul></div>
+</div>
+
+<h2>Insights</h2>
+<div class="grid two">
+  <div class="card"><h3>What the results say</h3><ul class="ins" id="insA"></ul></div>
+  <div class="card"><h3>What could still make it pay off (none tried)</h3><ul class="ins" id="insB"></ul></div>
+</div>
+<p class="note" id="caveat"></p>
+
+<h2>Models, jobs and locations</h2>
+<div class="card"><h3>Which model was used for what</h3><div class="scroll"><table id="models"></table></div></div>
+<div class="card" style="margin-top:12px"><h3>Jobs</h3><div class="scroll"><table id="jobs"></table></div></div>
+<div class="card" style="margin-top:12px"><h3>Where the results are</h3><div class="scroll"><table id="where"></table></div></div>
+<details open><summary>All configurations</summary><div class="scroll"><table id="allTbl"></table></div></details>
+<details><summary>GPU readings per minute</summary><div class="scroll tall"><table id="minTbl"></table></div></details>
+</main>
+<div id="tip"></div>
+<script>
+const D = {"run":"specdec-qwen38-rlvr-1123","job":120765,"questions":200,"gpus":8,"nodes":["rhea0174","rhea0178"],"elapsed_s":2403.0,"start":"10:30:27","end":"11:10:30","date":"23 Nov 2026","max_new_tokens":1024,"decoding":{"do_sample":true,"temperature":1.0,"top_p":0.95,"top_k":20},"target_params":27356728560,"drafts":{"Qwen3.5-0.8B":852985920,"Qwen3.5-2B":2213241664,"Qwen3.5-4B":4539265536,"Qwen3.5-9B":9409813744},"configs":[{"config":"baseline","draft":"","gamma":0,"answers":200,"tokens_per_s":35.79387344379782,"speedup":1.0,"sec_per_answer":3.329340709300886,"accuracy":1.0,"mean_tokens":119.17,"truncated_rate":0.0,"tokens_per_target_pass":1.0,"acceptance":null,"draft_passes_per_token":0.0,"draft_params":null,"ms_target":27.93774195939319,"ms_draft":0.0,"target_calls":119.17,"draft_calls":0.0,"rounds":0.0,"readvance":0.0,"qtype":{"run_rate":{"tokens_per_s":35.61551082153144,"acceptance":null,"accuracy":1.0,"mean_tokens":102.32835820895522,"speedup":1.0},"chase_rate":{"tokens_per_s":35.84139276147082,"acceptance":null,"accuracy":1.0,"mean_tokens":156.8507462686567,"speedup":1.0},"milestone":{"tokens_per_s":35.9071166255736,"acceptance":null,"accuracy":1.0,"mean_tokens":98.01515151515152,"speedup":1.0}},"ratio":[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0],"correct":200},{"config":"Qwen3.5-0.8B-g2","draft":"Qwen3.5-0.8B","gamma":2,"answers":200,"tokens_per_s":23.771800255871472,"speedup":0.6641304214587742,"sec_per_answer":5.036850331536261,"accuracy":1.0,"mean_tokens":119.735,"truncated_rate":0.0,"tokens_per_target_pass":1.8238385376999238,"acceptance":0.43118662435173,"draft_passes_per_token":1.0873178268676662,"draft_params":852985920,"ms_target":55.93039423215055,"ms_draft":10.555652440167464,"target_calls":65.65,"draft_calls":130.19,"rounds":64.65,"readvance":0.0,"qtype":{"run_rate":{"tokens_per_s":22.627101160726856,"acceptance":0.3958523542454676,"accuracy":1.0,"mean_tokens":101.65671641791045,"speedup":0.6353159238431473},"chase_rate":{"tokens_per_s":23.13194519748163,"acceptance":0.4025034059945504,"accuracy":1.0,"mean_tokens":157.49253731343285,"speedup":0.6453974975645552},"milestone":{"tokens_per_s":26.31561637806344,"acceptance":0.5257507390695504,"accuracy":1.0,"mean_tokens":99.75757575757575,"speedup":0.7328802435593241}},"ratio":[0.683,0.745,0.674,0.676,0.713,0.627,0.602,0.786,0.685,0.619,0.749,0.648,0.655,0.739,0.657,0.644,0.711,0.624,0.626,0.777,0.679,0.615,0.68,0.623,0.602,0.708,0.695,0.712,0.647,0.596,0.731,0.602,0.599,0.744,0.619,0.628,0.775,0.608,0.654,0.736,0.677,0.601,0.759,0.675,0.684,0.793,0.627,0.553,0.745,0.612,0.712,0.657,0.573,0.68,0.603,0.692,0.834,0.63,0.602,0.718,0.63,0.62,0.721,0.645,0.621,0.722,0.633,0.669,0.736,0.682,0.59,0.707,0.613,0.591,0.761,0.606,0.788,0.624,0.661,0.819,0.697,0.624,0.696,0.629,0.664,0.818,0.611,0.662,0.758,0.687,0.654,0.708,0.656,0.657,0.779,0.608,0.637,0.606,0.639,0.626,0.623,0.6,0.682,0.598,0.668,0.716,0.66,0.652,0.708,0.639,0.659,0.694,0.603,0.639,0.733,0.649,0.649,0.768,0.618,0.647,0.672,0.637,0.602,0.583,0.642,0.701,0.633,0.627,0.748,0.645,0.605,0.717,0.631,0.622,0.775,0.644,0.594,0.715,0.708,0.626,0.767,0.65,0.653,0.735,0.659,0.641,0.678,0.66,0.652,0.662,0.629,0.795,0.658,0.699,0.768,0.629,0.599,0.821,0.619,0.616,0.777,0.617,0.651,0.65,0.701,0.685,0.635,0.654,0.654,0.719,0.653,0.679,0.789,0.69,0.639,0.614,0.642,0.798,0.654,0.675,0.7,0.664,0.633,0.719,0.67,0.634,0.76,0.644,0.649,0.669,0.679,0.616,0.668,0.624,0.638,0.617,0.679,0.654,0.769,0.667],"correct":200},{"config":"Qwen3.5-0.8B-g4","draft":"Qwen3.5-0.8B","gamma":4,"answers":200,"tokens_per_s":21.628078512600833,"speedup":0.6042396765625385,"sec_per_answer":5.486617774707265,"accuracy":1.0,"mean_tokens":118.665,"truncated_rate":0.0,"tokens_per_target_pass":2.1066039410616013,"acceptance":0.2944627042819319,"draft_passes_per_token":1.8544642480933722,"draft_params":852985920,"ms_target":55.93039423215055,"ms_draft":10.555652440167464,"target_calls":56.33,"draft_calls":220.06,"rounds":55.135,"readvance":0.195,"qtype":{"run_rate":{"tokens_per_s":20.301766701371776,"acceptance":0.26571406855666185,"accuracy":1.0,"mean_tokens":100.5223880597015,"speedup":0.5700259867983782},"chase_rate":{"tokens_per_s":20.905162941930882,"acceptance":0.27348283662830725,"accuracy":1.0,"mean_tokens":158.07462686567163,"speedup":0.5832687105955253},"milestone":{"tokens_per_s":24.74148612268742,"acceptance":0.3724445305687433,"accuracy":1.0,"mean_tokens":97.07575757575758,"speedup":0.6890412945345256}},"ratio":[0.568,0.706,0.603,0.563,0.647,0.542,0.571,0.834,0.593,0.599,0.58,0.586,0.535,0.684,0.592,0.633,0.728,0.609,0.557,0.74,0.55,0.609,0.615,0.585,0.59,0.624,0.635,0.661,0.577,0.566,0.682,0.64,0.587,0.639,0.597,0.556,0.817,0.525,0.563,0.682,0.546,0.583,0.652,0.57,0.562,0.769,0.657,0.545,0.731,0.614,0.64,0.633,0.527,0.721,0.628,0.573,0.737,0.555,0.537,0.677,0.63,0.525,0.713,0.539,0.563,0.759,0.609,0.53,0.529,0.568,0.547,0.689,0.56,0.595,0.708,0.495,0.652,0.498,0.576,0.772,0.573,0.587,0.659,0.555,0.575,0.693,0.533,0.654,0.726,0.544,0.667,0.634,0.54,0.552,0.678,0.536,0.563,0.616,0.599,0.522,0.58,0.567,0.688,0.535,0.64,0.649,0.55,0.594,0.629,0.58,0.604,0.633,0.57,0.585,0.709,0.591,0.614,0.712,0.61,0.632,0.702,0.647,0.593,0.546,0.597,0.752,0.577,0.569,0.727,0.552,0.483,0.814,0.587,0.521,0.756,0.553,0.505,0.704,0.585,0.659,0.714,0.564,0.502,0.666,0.576,0.513,0.733,0.63,0.593,0.613,0.505,0.746,0.582,0.569,0.62,0.575,0.502,0.696,0.584,0.618,0.698,0.579,0.566,0.686,0.586,0.539,0.679,0.605,0.525,0.613,0.594,0.669,0.733,0.608,0.591,0.538,0.575,0.759,0.649,0.602,0.61,0.581,0.573,0.606,0.651,0.524,0.677,0.593,0.584,0.763,0.586,0.607,0.579,0.581,0.564,0.658,0.604,0.557,0.771,0.593],"correct":200},{"config":"Qwen3.5-0.8B-g8","draft":"Qwen3.5-0.8B","gamma":8,"answers":200,"tokens_per_s":16.626601343583953,"speedup":0.4645096979987486,"sec_per_answer":7.15119088639738,"accuracy":1.0,"mean_tokens":118.9,"truncated_rate":0.0,"tokens_per_target_pass":2.270167064439141,"acceptance":0.173137303762771,"draft_passes_per_token":3.383515559293524,"draft_params":852985920,"ms_target":55.93039423215055,"ms_draft":10.555652440167464,"target_calls":52.375,"draft_calls":402.3,"rounds":50.305,"readvance":1.07,"qtype":{"run_rate":{"tokens_per_s":15.693679229465145,"acceptance":0.15725241197328277,"accuracy":1.0,"mean_tokens":101.40298507462687,"speedup":0.440641699851108},"chase_rate":{"tokens_per_s":15.69447186925079,"acceptance":0.155835928839149,"accuracy":1.0,"mean_tokens":158.08955223880596,"speedup":0.43788677448166047},"milestone":{"tokens_per_s":19.830186241068798,"acceptance":0.23057395143487858,"accuracy":1.0,"mean_tokens":96.87878787878788,"speedup":0.5522633980291649}},"ratio":[0.475,0.622,0.419,0.469,0.399,0.407,0.444,0.534,0.448,0.4,0.635,0.498,0.499,0.523,0.476,0.442,0.512,0.44,0.44,0.629,0.413,0.446,0.581,0.488,0.446,0.429,0.447,0.585,0.411,0.487,0.485,0.445,0.515,0.508,0.427,0.451,0.573,0.48,0.404,0.647,0.415,0.454,0.634,0.483,0.366,0.645,0.455,0.399,0.58,0.39,0.434,0.489,0.426,0.619,0.426,0.529,0.486,0.449,0.426,0.74,0.422,0.361,0.611,0.414,0.427,0.577,0.44,0.425,0.505,0.433,0.5,0.433,0.43,0.366,0.681,0.454,0.578,0.416,0.461,0.515,0.424,0.439,0.522,0.399,0.411,0.561,0.443,0.513,0.573,0.389,0.462,0.43,0.468,0.435,0.574,0.469,0.436,0.465,0.499,0.436,0.433,0.512,0.589,0.384,0.495,0.56,0.453,0.523,0.493,0.513,0.427,0.444,0.422,0.47,0.532,0.419,0.494,0.415,0.453,0.437,0.633,0.535,0.416,0.522,0.393,0.534,0.466,0.438,0.519,0.396,0.392,0.553,0.507,0.369,0.607,0.414,0.374,0.471,0.46,0.465,0.585,0.479,0.371,0.525,0.442,0.424,0.551,0.402,0.422,0.438,0.362,0.562,0.391,0.448,0.663,0.461,0.448,0.644,0.435,0.424,0.609,0.397,0.476,0.504,0.432,0.516,0.693,0.516,0.449,0.42,0.38,0.443,0.588,0.442,0.406,0.434,0.518,0.69,0.453,0.457,0.518,0.388,0.423,0.722,0.436,0.436,0.518,0.373,0.449,0.684,0.529,0.395,0.435,0.471,0.461,0.532,0.47,0.373,0.535,0.452],"correct":200},{"config":"Qwen3.5-2B-g2","draft":"Qwen3.5-2B","gamma":2,"answers":200,"tokens_per_s":25.04107385788534,"speedup":0.6995910598277072,"sec_per_answer":4.771959887909179,"accuracy":1.0,"mean_tokens":119.495,"truncated_rate":0.0,"tokens_per_target_pass":1.9346717396583826,"acceptance":0.4886574169377084,"draft_passes_per_token":1.0246872254069208,"draft_params":2213241664,"ms_target":56.34627145731686,"ms_draft":10.678579398736083,"target_calls":61.765,"draft_calls":122.445,"rounds":60.765,"readvance":0.0,"qtype":{"run_rate":{"tokens_per_s":23.719646080220937,"acceptance":0.4456218627997769,"accuracy":1.0,"mean_tokens":100.3731343283582,"speedup":0.6659920223825955},"chase_rate":{"tokens_per_s":24.503666128728728,"acceptance":0.46329067973500315,"accuracy":1.0,"mean_tokens":157.70149253731344,"speedup":0.6836694737786516},"milestone":{"tokens_per_s":27.571135096981326,"acceptance":0.5851098720892096,"accuracy":1.0,"mean_tokens":100.12121212121212,"speedup":0.7678459784026418}},"ratio":[0.718,0.741,0.732,0.705,0.653,0.683,0.74,0.784,0.685,0.608,0.723,0.692,0.684,0.785,0.703,0.683,0.772,0.681,0.653,0.857,0.685,0.669,0.791,0.729,0.683,0.691,0.669,0.846,0.713,0.682,0.718,0.701,0.652,0.763,0.701,0.644,0.809,0.704,0.657,0.739,0.668,0.663,0.755,0.699,0.644,0.764,0.718,0.586,0.76,0.617,0.718,0.687,0.607,0.792,0.677,0.716,0.787,0.686,0.602,0.797,0.701,0.602,0.801,0.685,0.649,0.787,0.669,0.657,0.774,0.632,0.662,0.794,0.627,0.624,0.818,0.703,0.795,0.686,0.65,0.714,0.667,0.657,0.716,0.669,0.678,0.808,0.67,0.665,0.848,0.662,0.718,0.757,0.72,0.681,0.804,0.611,0.669,0.74,0.604,0.66,0.638,0.672,0.698,0.617,0.688,0.727,0.714,0.694,0.72,0.666,0.68,0.666,0.663,0.704,0.841,0.697,0.663,0.818,0.688,0.734,0.784,0.649,0.673,0.676,0.668,0.716,0.664,0.655,0.735,0.674,0.649,0.762,0.745,0.647,0.757,0.708,0.659,0.741,0.695,0.683,0.775,0.714,0.645,0.801,0.658,0.663,0.737,0.719,0.686,0.791,0.629,0.749,0.708,0.628,0.827,0.656,0.591,0.723,0.677,0.703,0.776,0.729,0.645,0.841,0.711,0.687,0.757,0.66,0.679,0.796,0.646,0.7,0.798,0.69,0.632,0.704,0.673,0.805,0.705,0.66,0.774,0.686,0.716,0.802,0.71,0.606,0.82,0.666,0.685,0.727,0.719,0.666,0.75,0.711,0.656,0.723,0.679,0.727,0.799,0.674],"correct":200},{"config":"Qwen3.5-2B-g4","draft":"Qwen3.5-2B","gamma":4,"answers":200,"tokens_per_s":23.510357929947755,"speedup":0.6568263132198539,"sec_per_answer":5.079037943862786,"accuracy":1.0,"mean_tokens":119.41,"truncated_rate":0.0,"tokens_per_target_pass":2.3154935039751794,"acceptance":0.34803188839063276,"draft_passes_per_token":1.6891382631270413,"draft_params":2213241664,"ms_target":56.34627145731686,"ms_draft":10.678579398736083,"target_calls":51.57,"draft_calls":201.7,"rounds":50.53,"readvance":0.04,"qtype":{"run_rate":{"tokens_per_s":22.672029557208443,"acceptance":0.3308792417703309,"accuracy":1.0,"mean_tokens":101.67164179104478,"speedup":0.636577407827098},"chase_rate":{"tokens_per_s":22.499913802387788,"acceptance":0.3195014116017685,"accuracy":1.0,"mean_tokens":158.77611940298507,"speedup":0.6277633782852042},"milestone":{"tokens_per_s":26.518522067429608,"acceptance":0.42534031413612566,"accuracy":1.0,"mean_tokens":97.45454545454545,"speedup":0.7385310924281431}},"ratio":[0.636,0.764,0.609,0.653,0.588,0.598,0.535,0.78,0.668,0.567,0.843,0.666,0.713,0.78,0.586,0.663,0.632,0.656,0.546,0.794,0.603,0.607,0.657,0.693,0.673,0.638,0.749,0.722,0.615,0.637,0.759,0.62,0.646,0.7,0.621,0.614,0.709,0.643,0.611,0.81,0.652,0.659,0.774,0.672,0.593,0.803,0.683,0.602,0.742,0.546,0.789,0.605,0.539,0.721,0.599,0.649,0.583,0.695,0.519,0.762,0.703,0.511,0.805,0.633,0.65,0.793,0.705,0.544,0.637,0.601,0.65,0.756,0.552,0.544,0.738,0.7,0.807,0.638,0.657,0.833,0.617,0.564,0.654,0.583,0.666,0.785,0.634,0.692,0.743,0.679,0.682,0.647,0.53,0.66,0.735,0.657,0.634,0.606,0.655,0.562,0.599,0.685,0.664,0.504,0.678,0.75,0.601,0.685,0.717,0.617,0.685,0.676,0.597,0.643,0.738,0.62,0.741,0.786,0.599,0.701,0.713,0.594,0.615,0.758,0.687,0.731,0.655,0.619,0.765,0.608,0.598,0.805,0.706,0.6,0.758,0.718,0.576,0.751,0.694,0.687,0.706,0.651,0.6,0.741,0.635,0.606,0.672,0.627,0.588,0.606,0.639,0.737,0.567,0.619,0.796,0.622,0.588,0.777,0.581,0.678,0.77,0.616,0.68,0.827,0.653,0.714,0.71,0.639,0.631,0.765,0.663,0.71,0.856,0.606,0.599,0.686,0.693,0.811,0.639,0.643,0.759,0.609,0.676,0.58,0.674,0.647,0.814,0.624,0.699,0.707,0.644,0.632,0.647,0.61,0.683,0.773,0.601,0.696,0.719,0.637],"correct":200},{"config":"Qwen3.5-2B-g8","draft":"Qwen3.5-2B","gamma":8,"answers":200,"tokens_per_s":18.189982768644857,"speedup":0.5081870448362085,"sec_per_answer":6.517048504539707,"accuracy":1.0,"mean_tokens":118.545,"truncated_rate":0.0,"tokens_per_target_pass":2.5123450249019816,"acceptance":0.204921885801189,"draft_passes_per_token":3.059175840398161,"draft_params":2213241664,"ms_target":56.34627145731686,"ms_draft":10.678579398736083,"target_calls":47.185,"draft_calls":362.65,"rounds":45.315,"readvance":0.87,"qtype":{"run_rate":{"tokens_per_s":17.213437620021004,"acceptance":0.1888767023124029,"accuracy":1.0,"mean_tokens":101.65671641791045,"speedup":0.48331295053655615},"chase_rate":{"tokens_per_s":17.384177716332278,"acceptance":0.1891064689626482,"accuracy":1.0,"mean_tokens":157.044776119403,"speedup":0.48503075290701636},"milestone":{"tokens_per_s":21.079955581493515,"acceptance":0.2575171181899375,"accuracy":1.0,"mean_tokens":96.60606060606061,"speedup":0.5870690147946896}},"ratio":[0.471,0.575,0.425,0.431,0.415,0.492,0.482,0.591,0.491,0.46,0.723,0.538,0.567,0.599,0.511,0.494,0.441,0.513,0.45,0.472,0.524,0.508,0.579,0.473,0.497,0.472,0.483,0.554,0.478,0.491,0.634,0.497,0.503,0.607,0.475,0.469,0.57,0.492,0.445,0.602,0.472,0.534,0.645,0.466,0.425,0.603,0.517,0.433,0.778,0.534,0.515,0.538,0.456,0.716,0.483,0.506,0.567,0.49,0.389,0.64,0.521,0.41,0.655,0.496,0.503,0.715,0.479,0.47,0.477,0.474,0.556,0.536,0.547,0.519,0.677,0.534,0.607,0.439,0.474,0.555,0.5,0.434,0.673,0.481,0.481,0.591,0.454,0.438,0.607,0.439,0.533,0.57,0.476,0.464,0.647,0.473,0.519,0.484,0.439,0.416,0.473,0.469,0.515,0.376,0.529,0.649,0.486,0.57,0.467,0.544,0.522,0.523,0.515,0.506,0.633,0.478,0.506,0.748,0.461,0.534,0.637,0.475,0.515,0.53,0.482,0.641,0.497,0.508,0.566,0.46,0.443,0.625,0.52,0.442,0.729,0.546,0.48,0.52,0.509,0.53,0.531,0.495,0.392,0.56,0.479,0.442,0.645,0.466,0.491,0.509,0.416,0.547,0.491,0.399,0.605,0.474,0.403,0.669,0.461,0.549,0.738,0.513,0.515,0.52,0.582,0.534,0.616,0.482,0.434,0.478,0.436,0.465,0.573,0.458,0.454,0.444,0.512,0.601,0.48,0.52,0.519,0.494,0.505,0.552,0.478,0.515,0.602,0.451,0.545,0.635,0.55,0.621,0.613,0.495,0.471,0.476,0.511,0.466,0.574,0.441],"correct":200},{"config":"Qwen3.5-4B-g2","draft":"Qwen3.5-4B","gamma":2,"answers":200,"tokens_per_s":23.574277365136616,"speedup":0.6586120779063503,"sec_per_answer":5.07120528652129,"accuracy":1.0,"mean_tokens":119.55,"truncated_rate":0.0,"tokens_per_target_pass":2.044813136064312,"acceptance":0.5456642869580358,"draft_passes_per_token":0.9691342534504391,"draft_params":4539265536,"ms_target":58.34663719701676,"ms_draft":14.371928629173796,"target_calls":58.465,"draft_calls":115.86,"rounds":57.465,"readvance":0.0,"qtype":{"run_rate":{"tokens_per_s":22.542503071604013,"acceptance":0.5116591928251121,"accuracy":1.0,"mean_tokens":100.19402985074628,"speedup":0.6329406079436573},"chase_rate":{"tokens_per_s":23.36166796869348,"acceptance":0.5328248696659587,"accuracy":1.0,"mean_tokens":158.97014925373134,"speedup":0.6518069240268773},"milestone":{"tokens_per_s":25.1256810237605,"acceptance":0.6065158676569885,"accuracy":1.0,"mean_tokens":99.18181818181819,"speedup":0.699740981314707}},"ratio":[0.659,0.739,0.649,0.604,0.653,0.681,0.629,0.681,0.587,0.638,0.679,0.653,0.643,0.704,0.644,0.691,0.715,0.656,0.577,0.727,0.688,0.722,0.649,0.709,0.689,0.631,0.639,0.684,0.664,0.625,0.724,0.66,0.626,0.672,0.638,0.609,0.747,0.655,0.609,0.659,0.689,0.631,0.769,0.64,0.635,0.712,0.69,0.595,0.682,0.656,0.693,0.688,0.565,0.677,0.653,0.624,0.729,0.66,0.605,0.76,0.696,0.609,0.719,0.653,0.638,0.701,0.668,0.607,0.717,0.638,0.624,0.715,0.637,0.575,0.718,0.63,0.671,0.655,0.675,0.711,0.643,0.63,0.635,0.677,0.659,0.726,0.607,0.611,0.677,0.699,0.665,0.7,0.665,0.625,0.725,0.63,0.649,0.665,0.661,0.633,0.643,0.663,0.665,0.626,0.621,0.717,0.634,0.624,0.658,0.593,0.651,0.611,0.613,0.659,0.759,0.65,0.615,0.651,0.629,0.615,0.693,0.629,0.638,0.646,0.64,0.688,0.633,0.651,0.627,0.635,0.618,0.685,0.647,0.601,0.703,0.642,0.568,0.72,0.65,0.676,0.701,0.654,0.582,0.703,0.661,0.638,0.721,0.697,0.64,0.664,0.641,0.725,0.66,0.632,0.731,0.644,0.618,0.684,0.624,0.663,0.681,0.648,0.626,0.763,0.607,0.633,0.72,0.665,0.661,0.674,0.626,0.641,0.728,0.64,0.632,0.647,0.65,0.677,0.684,0.64,0.682,0.678,0.659,0.732,0.63,0.661,0.761,0.669,0.601,0.669,0.701,0.613,0.616,0.635,0.628,0.659,0.654,0.69,0.764,0.631],"correct":200},{"config":"Qwen3.5-4B-g4","draft":"Qwen3.5-4B","gamma":4,"answers":200,"tokens_per_s":21.925382444494407,"speedup":0.6125456770952942,"sec_per_answer":5.450760108862305,"accuracy":1.0,"mean_tokens":119.51,"truncated_rate":0.0,"tokens_per_target_pass":2.515470427278468,"acceptance":0.40069365414837693,"draft_passes_per_token":1.5524223914316793,"draft_params":4539265536,"ms_target":58.34663719701676,"ms_draft":14.371928629173796,"target_calls":47.51,"draft_calls":185.53,"rounds":46.505,"readvance":0.005,"qtype":{"run_rate":{"tokens_per_s":21.119019218741588,"acceptance":0.3811026545387043,"accuracy":1.0,"mean_tokens":100.74626865671642,"speedup":0.5929725204439308},"chase_rate":{"tokens_per_s":21.160708116613197,"acceptance":0.3749051205698605,"accuracy":1.0,"mean_tokens":159.07462686567163,"speedup":0.590398600228526},"milestone":{"tokens_per_s":24.334350101426867,"acceptance":0.47318156579677956,"accuracy":1.0,"mean_tokens":98.39393939393939,"speedup":0.6777027059893628}},"ratio":[0.58,0.782,0.584,0.593,0.56,0.564,0.538,0.726,0.56,0.546,0.695,0.586,0.649,0.744,0.577,0.644,0.612,0.633,0.559,0.638,0.644,0.583,0.719,0.594,0.594,0.591,0.598,0.621,0.547,0.608,0.661,0.627,0.59,0.653,0.578,0.621,0.589,0.596,0.555,0.731,0.582,0.625,0.656,0.631,0.554,0.687,0.648,0.557,0.763,0.601,0.611,0.605,0.588,0.692,0.678,0.582,0.736,0.621,0.463,0.733,0.629,0.512,0.684,0.549,0.562,0.737,0.587,0.528,0.53,0.56,0.634,0.682,0.598,0.561,0.726,0.675,0.718,0.555,0.563,0.667,0.591,0.525,0.611,0.629,0.609,0.621,0.604,0.641,0.772,0.571,0.664,0.671,0.514,0.663,0.617,0.615,0.564,0.65,0.584,0.607,0.593,0.56,0.614,0.509,0.633,0.67,0.551,0.636,0.701,0.585,0.623,0.557,0.509,0.576,0.63,0.572,0.577,0.644,0.557,0.644,0.7,0.567,0.583,0.581,0.593,0.68,0.621,0.674,0.611,0.636,0.568,0.695,0.596,0.554,0.731,0.571,0.548,0.701,0.589,0.581,0.697,0.665,0.506,0.753,0.559,0.532,0.676,0.625,0.552,0.732,0.634,0.697,0.588,0.639,0.678,0.558,0.582,0.617,0.651,0.617,0.755,0.629,0.538,0.68,0.593,0.675,0.701,0.633,0.579,0.848,0.582,0.61,0.674,0.585,0.632,0.59,0.651,0.634,0.542,0.62,0.669,0.62,0.618,0.677,0.607,0.597,0.701,0.53,0.6,0.683,0.57,0.627,0.587,0.651,0.645,0.66,0.552,0.591,0.74,0.574],"correct":200},{"config":"Qwen3.5-4B-g8","draft":"Qwen3.5-4B","gamma":8,"answers":200,"tokens_per_s":16.82490125413402,"speedup":0.4700497497302671,"sec_per_answer":7.078496224204428,"accuracy":1.0,"mean_tokens":119.095,"truncated_rate":0.0,"tokens_per_target_pass":2.8339083878643665,"acceptance":0.24731968053699618,"draft_passes_per_token":2.710357277803434,"draft_params":4539265536,"ms_target":58.34663719701676,"ms_draft":14.371928629173796,"target_calls":42.025,"draft_calls":322.79,"rounds":40.39,"readvance":0.635,"qtype":{"run_rate":{"tokens_per_s":16.38052595811777,"acceptance":0.23975981128029167,"accuracy":1.0,"mean_tokens":100.77611940298507,"speedup":0.45992674484440876},"chase_rate":{"tokens_per_s":15.979768140805408,"acceptance":0.22754989837059744,"accuracy":1.0,"mean_tokens":157.2537313432836,"speedup":0.44584674058714363},"milestone":{"tokens_per_s":18.976156512305,"acceptance":0.29410640331315707,"accuracy":1.0,"mean_tokens":98.95454545454545,"speedup":0.5284789839903182}},"ratio":[0.369,0.522,0.441,0.456,0.39,0.406,0.421,0.481,0.52,0.441,0.556,0.456,0.465,0.572,0.46,0.53,0.486,0.456,0.451,0.52,0.445,0.441,0.563,0.473,0.533,0.458,0.473,0.545,0.428,0.584,0.555,0.45,0.447,0.537,0.454,0.451,0.508,0.466,0.462,0.564,0.458,0.449,0.48,0.431,0.425,0.507,0.455,0.416,0.673,0.413,0.483,0.534,0.373,0.601,0.429,0.508,0.627,0.43,0.366,0.585,0.45,0.36,0.487,0.417,0.464,0.514,0.447,0.401,0.471,0.487,0.54,0.618,0.482,0.383,0.599,0.435,0.537,0.417,0.541,0.538,0.492,0.487,0.494,0.451,0.53,0.615,0.497,0.506,0.491,0.43,0.448,0.422,0.491,0.448,0.649,0.438,0.462,0.443,0.452,0.465,0.501,0.492,0.489,0.371,0.424,0.533,0.491,0.494,0.462,0.424,0.465,0.429,0.44,0.476,0.662,0.478,0.458,0.575,0.426,0.526,0.715,0.481,0.5,0.444,0.468,0.555,0.448,0.422,0.418,0.45,0.354,0.648,0.463,0.415,0.558,0.408,0.422,0.476,0.427,0.509,0.635,0.44,0.506,0.608,0.447,0.424,0.504,0.465,0.506,0.416,0.43,0.477,0.393,0.414,0.636,0.415,0.456,0.467,0.399,0.46,0.637,0.418,0.469,0.447,0.467,0.499,0.442,0.401,0.406,0.467,0.378,0.462,0.548,0.43,0.448,0.457,0.467,0.596,0.448,0.499,0.506,0.447,0.452,0.519,0.484,0.44,0.607,0.401,0.463,0.538,0.477,0.59,0.375,0.438,0.614,0.483,0.437,0.483,0.631,0.447],"correct":200},{"config":"Qwen3.5-9B-g2","draft":"Qwen3.5-9B","gamma":2,"answers":200,"tokens_per_s":24.26698814640644,"speedup":0.6779648529659563,"sec_per_answer":4.926033642032417,"accuracy":1.0,"mean_tokens":119.54,"truncated_rate":0.0,"tokens_per_target_pass":2.09719298245614,"acceptance":0.5730432451751251,"draft_passes_per_token":0.944621047348168,"draft_params":9409813744,"ms_target":58.4096642471573,"ms_draft":14.205337590713093,"target_calls":57.0,"draft_calls":112.92,"rounds":56.0,"readvance":0.0,"qtype":{"run_rate":{"tokens_per_s":23.22426171026744,"acceptance":0.5372227286539046,"accuracy":1.0,"mean_tokens":101.07462686567165,"speedup":0.6520827913052748},"chase_rate":{"tokens_per_s":24.07586350639135,"acceptance":0.5612600937095006,"accuracy":1.0,"mean_tokens":158.17910447761193,"speedup":0.6717334805212338},"milestone":{"tokens_per_s":25.79874127111864,"acceptance":0.6343787905042454,"accuracy":1.0,"mean_tokens":99.06060606060606,"speedup":0.718485461813561}},"ratio":[0.665,0.754,0.693,0.652,0.683,0.677,0.678,0.741,0.697,0.654,0.701,0.688,0.655,0.709,0.671,0.664,0.714,0.687,0.623,0.721,0.7,0.673,0.674,0.668,0.728,0.648,0.723,0.775,0.671,0.617,0.767,0.676,0.657,0.69,0.69,0.617,0.747,0.666,0.674,0.702,0.701,0.672,0.692,0.687,0.682,0.728,0.685,0.682,0.711,0.622,0.674,0.695,0.617,0.708,0.675,0.689,0.732,0.719,0.617,0.766,0.661,0.607,0.735,0.681,0.666,0.749,0.671,0.677,0.761,0.631,0.669,0.682,0.635,0.6,0.72,0.629,0.758,0.666,0.665,0.71,0.673,0.641,0.682,0.656,0.649,0.73,0.639,0.654,0.725,0.655,0.667,0.686,0.692,0.734,0.757,0.68,0.704,0.657,0.665,0.616,0.679,0.622,0.693,0.648,0.686,0.737,0.638,0.639,0.65,0.686,0.62,0.706,0.655,0.601,0.721,0.653,0.618,0.709,0.675,0.643,0.671,0.66,0.602,0.729,0.697,0.713,0.668,0.625,0.708,0.669,0.634,0.714,0.675,0.673,0.745,0.663,0.562,0.754,0.677,0.678,0.725,0.65,0.633,0.706,0.605,0.672,0.738,0.651,0.689,0.655,0.652,0.735,0.705,0.648,0.706,0.686,0.59,0.674,0.639,0.699,0.733,0.688,0.666,0.76,0.702,0.635,0.719,0.645,0.639,0.683,0.58,0.633,0.724,0.647,0.664,0.68,0.656,0.727,0.649,0.656,0.738,0.722,0.669,0.748,0.675,0.665,0.733,0.671,0.649,0.719,0.748,0.677,0.726,0.686,0.678,0.726,0.682,0.683,0.721,0.713],"correct":200},{"config":"Qwen3.5-9B-g4","draft":"Qwen3.5-9B","gamma":4,"answers":200,"tokens_per_s":22.825980337239553,"speedup":0.6377063486319814,"sec_per_answer":5.239205424395041,"accuracy":1.0,"mean_tokens":119.59,"truncated_rate":0.0,"tokens_per_target_pass":2.6034614128660065,"acceptance":0.42419228180390395,"draft_passes_per_token":1.499122000167238,"draft_params":9409813744,"ms_target":58.4096642471573,"ms_draft":14.205337590713093,"target_calls":45.935,"draft_calls":179.28,"rounds":44.925,"readvance":0.01,"qtype":{"run_rate":{"tokens_per_s":22.181597273851697,"acceptance":0.4094171691070916,"accuracy":1.0,"mean_tokens":102.11940298507463,"speedup":0.6228072197252261},"chase_rate":{"tokens_per_s":22.402381653677,"acceptance":0.4089557785209959,"accuracy":1.0,"mean_tokens":158.044776119403,"speedup":0.6250421629194991},"milestone":{"tokens_per_s":24.321911387257096,"acceptance":0.4683809734024942,"accuracy":1.0,"mean_tokens":98.28787878787878,"speedup":0.6773562923717094}},"ratio":[0.639,0.712,0.614,0.613,0.582,0.668,0.603,0.67,0.63,0.612,0.839,0.647,0.61,0.674,0.608,0.664,0.646,0.654,0.602,0.653,0.584,0.593,0.617,0.671,0.715,0.632,0.71,0.71,0.654,0.682,0.696,0.659,0.626,0.68,0.662,0.681,0.667,0.613,0.534,0.724,0.631,0.691,0.701,0.616,0.594,0.758,0.62,0.596,0.725,0.635,0.621,0.626,0.636,0.742,0.566,0.696,0.738,0.615,0.52,0.644,0.668,0.478,0.644,0.646,0.574,0.734,0.614,0.564,0.586,0.631,0.719,0.733,0.588,0.577,0.674,0.783,0.688,0.602,0.67,0.779,0.663,0.542,0.521,0.659,0.636,0.694,0.585,0.727,0.725,0.603,0.62,0.641,0.601,0.685,0.67,0.667,0.619,0.577,0.633,0.622,0.587,0.68,0.706,0.547,0.502,0.647,0.638,0.597,0.718,0.606,0.621,0.568,0.621,0.576,0.651,0.627,0.605,0.694,0.608,0.671,0.702,0.669,0.695,0.545,0.635,0.678,0.623,0.583,0.64,0.609,0.627,0.679,0.657,0.572,0.688,0.611,0.503,0.639,0.631,0.719,0.646,0.573,0.541,0.654,0.593,0.541,0.71,0.6,0.591,0.657,0.584,0.751,0.606,0.554,0.71,0.602,0.53,0.705,0.599,0.65,0.733,0.651,0.626,0.546,0.624,0.717,0.708,0.628,0.631,0.673,0.629,0.7,0.655,0.602,0.616,0.6,0.649,0.68,0.598,0.701,0.697,0.657,0.611,0.695,0.636,0.621,0.652,0.685,0.603,0.672,0.627,0.65,0.599,0.615,0.662,0.613,0.68,0.619,0.705,0.643],"correct":200},{"config":"Qwen3.5-9B-g8","draft":"Qwen3.5-9B","gamma":8,"answers":200,"tokens_per_s":17.886170458579816,"speedup":0.49969921491352426,"sec_per_answer":6.6842145039857135,"accuracy":1.0,"mean_tokens":119.555,"truncated_rate":0.0,"tokens_per_target_pass":2.988501437320335,"acceptance":0.2680395521778214,"draft_passes_per_token":2.5672284722512653,"draft_params":9409813744,"ms_target":58.4096642471573,"ms_draft":14.205337590713093,"target_calls":40.005,"draft_calls":306.925,"rounds":38.385,"readvance":0.62,"qtype":{"run_rate":{"tokens_per_s":17.073609056216416,"acceptance":0.2532283988250291,"accuracy":1.0,"mean_tokens":101.08955223880596,"speedup":0.47938689246300314},"chase_rate":{"tokens_per_s":17.271181138226886,"acceptance":0.2534586923104422,"accuracy":1.0,"mean_tokens":157.3134328358209,"speedup":0.48187806911324194},"milestone":{"tokens_per_s":20.000991469841505,"acceptance":0.312545322697607,"accuracy":1.0,"mean_tokens":99.96969696969697,"speedup":0.5570202608693033}},"ratio":[0.489,0.503,0.528,0.471,0.504,0.486,0.396,0.58,0.508,0.44,0.52,0.495,0.453,0.549,0.527,0.428,0.549,0.472,0.479,0.604,0.459,0.444,0.505,0.513,0.548,0.467,0.48,0.463,0.414,0.528,0.545,0.503,0.473,0.651,0.484,0.46,0.512,0.471,0.434,0.605,0.479,0.463,0.565,0.481,0.423,0.574,0.568,0.407,0.634,0.507,0.443,0.491,0.446,0.656,0.525,0.552,0.519,0.471,0.443,0.587,0.456,0.411,0.637,0.478,0.468,0.639,0.564,0.399,0.414,0.501,0.581,0.537,0.43,0.487,0.613,0.51,0.464,0.424,0.534,0.532,0.497,0.471,0.487,0.476,0.48,0.554,0.567,0.553,0.512,0.468,0.514,0.529,0.426,0.493,0.539,0.46,0.528,0.522,0.515,0.495,0.455,0.479,0.541,0.447,0.543,0.502,0.454,0.553,0.523,0.496,0.519,0.776,0.494,0.508,0.667,0.501,0.462,0.636,0.508,0.578,0.592,0.477,0.485,0.431,0.633,0.537,0.527,0.484,0.544,0.505,0.463,0.641,0.495,0.477,0.657,0.394,0.448,0.508,0.467,0.499,0.543,0.437,0.374,0.529,0.515,0.451,0.693,0.509,0.477,0.464,0.423,0.657,0.485,0.397,0.606,0.469,0.398,0.608,0.495,0.491,0.589,0.411,0.455,0.58,0.534,0.568,0.523,0.44,0.475,0.511,0.454,0.453,0.607,0.432,0.513,0.461,0.54,0.635,0.512,0.482,0.556,0.432,0.473,0.494,0.452,0.508,0.512,0.434,0.469,0.556,0.508,0.608,0.418,0.509,0.524,0.599,0.499,0.479,0.584,0.49],"correct":200},{"config":"hf-generate","draft":"","gamma":0,"answers":200,"tokens_per_s":35.346408026146555,"speedup":0.9874988266259068,"sec_per_answer":3.3714882686763303,"accuracy":1.0,"mean_tokens":119.17,"truncated_rate":0.0,"tokens_per_target_pass":1.0,"acceptance":null,"draft_passes_per_token":0.0,"draft_params":null,"ms_target":28.291417879301253,"ms_draft":0.0,"target_calls":119.17,"draft_calls":0.0,"rounds":0.0,"readvance":0.0,"qtype":{"run_rate":{"tokens_per_s":35.17976993786636,"acceptance":null,"accuracy":1.0,"mean_tokens":102.32835820895522,"speedup":0.9877654181109864},"chase_rate":{"tokens_per_s":35.37578120939223,"acceptance":null,"accuracy":1.0,"mean_tokens":156.8507462686567,"speedup":0.9870091110806631},"milestone":{"tokens_per_s":35.47665212614688,"acceptance":null,"accuracy":1.0,"mean_tokens":98.01515151515152,"speedup":0.9880117219125265}},"ratio":[0.988,0.991,0.989,0.995,0.985,0.982,0.987,0.988,0.99,0.988,0.997,0.994,0.995,0.988,0.987,0.989,0.989,0.994,0.994,0.991,0.99,0.986,0.99,0.99,0.995,0.99,0.987,0.984,0.982,0.995,0.983,0.993,0.993,0.982,0.993,0.993,0.988,0.986,0.988,0.989,0.987,0.989,0.986,0.989,0.994,0.991,0.993,0.985,0.988,0.993,0.989,0.979,0.979,1.027,0.991,0.988,0.984,0.983,0.99,0.985,0.982,0.983,0.983,0.985,0.986,0.985,0.98,0.989,0.995,0.988,0.984,0.992,0.982,0.98,0.987,0.976,0.986,0.985,1.0,0.98,0.974,0.987,0.981,0.996,0.981,0.994,0.981,0.989,0.982,0.98,0.987,0.987,0.988,0.983,0.989,0.984,0.989,0.986,0.995,0.981,0.982,0.982,0.987,0.976,0.99,0.979,0.987,0.984,0.972,0.981,0.979,0.994,0.981,0.981,0.99,0.983,0.976,0.985,0.981,0.991,0.989,0.985,0.984,0.988,0.986,0.999,0.984,0.983,0.98,0.983,0.985,0.977,0.988,0.977,0.988,0.986,0.985,0.988,0.985,0.993,0.989,0.99,0.993,0.983,0.986,0.986,0.973,0.99,0.992,0.989,1.001,0.99,0.991,0.99,0.985,0.989,0.99,0.99,0.988,0.992,0.992,0.99,0.982,0.99,0.988,0.998,0.982,0.984,0.982,0.994,0.988,0.991,0.99,0.985,0.978,0.998,0.985,0.987,0.987,0.987,0.995,0.992,0.992,0.988,0.991,0.988,0.986,0.985,0.985,0.99,0.989,0.984,0.981,0.991,0.993,0.989,0.984,0.991,0.992,0.987],"correct":200}],"gpu":{"util":[[0.0,35.5,52.0,54.0,48.8,50.5,52.2,51.8,51.8,49.5,50.5,51.0,49.8,50.5,54.0,48.5,50.8,51.0,50.5,49.2,48.5,50.2,47.5,52.0,49.5,52.5,50.8,50.5,51.5,51.0,50.2,48.8,50.5,51.0,49.5,49.5,51.0,50.5,14.0,0.0,null],[0.0,38.8,53.8,52.0,48.0,50.2,49.2,50.2,51.8,51.5,52.2,49.2,51.5,48.0,49.8,49.5,51.0,50.8,51.8,50.2,49.0,50.0,48.8,49.8,49.0,50.8,48.5,50.2,50.0,49.0,50.2,50.5,51.5,48.5,49.2,48.8,49.2,49.0,52.0,0.0,null],[0.0,45.8,63.0,63.0,63.5,64.5,64.8,63.2,61.8,62.8,66.5,64.0,63.8,64.5,64.8,64.0,63.0,64.8,65.8,62.0,66.8,63.8,66.0,64.5,63.8,63.0,63.5,64.8,16.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,null],[0.0,48.5,64.0,63.0,62.2,62.5,66.2,61.8,63.5,63.0,60.5,63.5,62.2,65.0,63.0,63.2,61.8,63.5,66.0,63.2,63.2,63.8,62.8,63.8,63.0,65.0,65.2,62.0,64.5,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,null],[0.0,49.2,62.2,63.5,66.8,64.0,64.2,65.0,64.2,64.0,63.5,62.5,61.0,61.5,64.8,61.2,62.2,63.5,65.0,63.0,59.5,63.8,62.2,62.8,64.0,62.5,64.2,63.8,64.8,48.5,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,null],[0.0,44.5,64.8,62.8,63.8,64.5,63.8,64.5,64.2,63.8,62.5,65.5,63.8,65.0,64.2,64.5,63.8,60.5,63.5,63.8,62.2,62.8,63.8,66.8,64.2,62.0,63.8,48.8,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,null],[0.0,38.2,49.5,50.2,50.5,49.2,51.8,52.5,51.2,51.0,51.8,49.8,53.0,49.8,53.5,55.8,50.8,49.8,51.5,51.0,50.8,48.5,51.5,50.2,51.2,49.5,52.0,52.2,52.8,49.0,51.0,50.0,52.5,51.2,50.8,37.5,0.0,0.0,0.0,0.0,null],[0.0,37.5,51.2,51.2,49.2,51.5,52.5,51.8,51.0,50.0,49.5,50.2,51.8,52.5,50.0,48.5,53.5,54.0,50.0,49.2,51.8,51.2,50.8,51.0,50.2,53.8,51.2,52.2,51.2,50.0,52.2,53.0,50.2,50.5,48.8,49.0,49.8,50.2,14.0,0.0,null]],"mem":[[0.0,78.3,86.7,86.8,86.8,86.8,86.8,86.9,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.2,87.2,87.2,87.2,87.2,87.2,87.2,87.2,21.8,0.0,null],[0.0,78.3,86.7,86.7,86.7,86.8,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,0.0,null],[0.0,78.3,86.7,86.7,86.7,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.9,87.0,87.0,87.0,87.0,87.0,87.0,21.7,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,null],[0.0,78.3,86.7,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.9,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,null],[0.0,78.3,86.7,86.7,86.8,86.8,86.8,86.8,86.8,86.8,86.8,86.9,86.9,86.9,86.9,86.9,86.9,87.0,87.1,87.1,87.1,87.2,87.2,87.2,87.2,87.2,87.2,87.2,87.2,65.4,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,null],[0.0,78.3,86.7,86.7,86.7,86.7,86.7,86.7,86.7,86.7,86.7,86.8,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,87.0,87.0,87.0,65.2,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,null],[0.0,78.3,86.7,86.8,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,86.9,87.0,87.0,87.0,87.0,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.2,87.2,87.2,87.2,87.2,87.2,87.2,65.4,0.0,0.0,0.0,0.0,null],[0.0,78.3,86.7,86.7,86.7,86.8,86.9,86.9,86.9,86.9,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.0,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,87.1,21.8,0.0,null]],"pow":[[412.4,571.4,587.0,600.2,593.2,590.1,610.9,609.9,615.0,586.3,605.6,591.8,600.7,587.8,602.2,591.2,595.3,617.7,596.0,594.6,602.5,600.6,585.3,628.6,588.5,630.4,607.1,593.8,611.1,600.2,593.7,589.4,628.0,599.1,593.1,578.7,619.4,594.8,480.5,412.3,null],[397.8,561.5,607.5,593.0,578.8,600.4,608.7,580.1,606.8,587.5,613.0,578.9,591.4,587.7,589.0,605.0,586.7,613.7,606.3,607.0,584.1,591.5,584.8,585.2,604.8,590.1,584.4,607.7,607.2,572.8,593.9,600.5,606.8,577.5,595.9,583.5,590.4,573.1,600.6,397.8,null],[421.0,583.3,625.8,624.6,631.2,655.5,612.4,648.0,623.9,618.3,661.0,648.8,627.6,652.1,649.3,623.6,611.1,653.6,661.9,616.0,660.3,641.8,638.1,661.6,628.0,642.1,629.4,615.6,495.4,414.5,414.5,414.5,414.5,414.5,414.5,414.5,414.5,414.5,414.5,414.4,null],[405.9,596.1,632.8,602.2,600.6,614.8,640.0,590.1,610.6,604.7,596.0,626.2,609.9,638.9,609.9,604.3,605.4,621.6,635.1,639.9,622.6,636.6,625.5,633.4,604.2,624.2,639.5,601.3,607.1,394.9,394.7,394.7,394.7,394.8,394.7,394.7,394.7,394.7,394.7,394.8,null],[412.4,666.1,675.6,708.4,712.3,689.5,718.1,712.1,679.1,687.8,678.0,681.1,676.0,675.7,714.3,675.3,685.4,713.4,712.9,686.9,669.8,674.3,670.0,685.8,697.6,676.1,705.1,679.8,709.5,619.3,412.4,412.4,412.4,412.4,412.4,412.1,411.6,412.4,412.4,412.4,null],[417.2,592.4,653.1,630.6,636.9,659.1,619.8,642.9,630.3,634.3,635.3,647.8,624.8,668.6,627.8,618.5,633.8,618.2,620.4,629.9,620.2,630.5,626.8,657.5,640.1,625.6,652.6,630.2,416.6,416.8,417.3,417.3,417.3,417.3,417.3,416.1,414.6,417.0,417.3,417.3,null],[419.5,553.6,584.0,604.5,575.7,574.4,614.5,601.4,584.6,583.2,611.0,602.6,609.1,574.2,610.1,608.3,574.0,565.4,590.5,588.3,596.8,571.0,587.9,582.8,585.2,575.3,606.8,603.9,604.2,574.2,597.8,602.0,584.2,574.5,609.1,541.3,402.3,402.2,402.6,402.7,null],[428.7,590.8,644.2,641.7,641.9,656.7,649.4,635.1,645.2,649.6,653.1,626.7,653.4,638.0,629.6,621.8,662.7,656.0,622.0,622.2,639.9,646.4,643.6,628.3,626.0,656.3,637.5,659.7,626.4,653.2,651.0,658.5,626.8,655.7,630.4,639.6,633.3,630.6,477.5,398.4,null]],"readings":1256,"util_avg":45.0,"mem_peak":87.2,"mem_avg":69.9,"pow_avg":582},"arch":{"Qwen3.8-27B":64,"Qwen3.5-0.8B":24,"Qwen3.5-2B":24,"Qwen3.5-4B":32,"Qwen3.5-9B":32},"hidden":{"Qwen3.8-27B":5120,"Qwen3.5-0.8B":1024,"Qwen3.5-2B":2048,"Qwen3.5-4B":2560,"Qwen3.5-9B":4096},"disk":{"Qwen3.5-0.8B":1.7,"Qwen3.5-2B":4.5,"Qwen3.5-4B":9.3,"Qwen3.5-9B":19.3},"wandb":"cricket-specdec-rhea/cn7l58sn"};
+const $ = q => document.querySelector(q), NS = "http://www.w3.org/2000/svg";
+const el = (t, a = {}, txt) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; return e; };
+const fmt = (x, d = 0) => x.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (x, d = 0) => fmt(x * 100, d) + "%";
+const avgOf = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((p, q) => p + q, 0) / v.length : null; };
+const li = x => x.map(v => `<li>${v}</li>`).join("");
+const STILL = matchMedia("(prefers-reduced-motion: reduce)").matches, CAP = 286.5, W = 520;
+const tip = $("#tip");
+function showTip(ev, html) { tip.innerHTML = html; tip.style.display = "block"; const w = tip.offsetWidth, h = tip.offsetHeight; let x = ev.clientX + 14, y = ev.clientY + 14; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + h > innerHeight - 8) y = ev.clientY - h - 14; tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px"; }
+const hideTip = () => tip.style.display = "none";
+function hover(node, html) { node.addEventListener("mousemove", e => showTip(e, typeof html === "function" ? html() : html)); node.addEventListener("mouseleave", hideTip); }
+
+const C = D.configs, BASE = C.find(c => c.config === "baseline"), HF = C.find(c => c.config === "hf-generate");
+const SP = C.filter(c => c.draft), DRAFTS = [...new Set(SP.map(c => c.draft))], GAMMAS = [...new Set(SP.map(c => c.gamma))].sort((x, y) => x - y);
+const GCOL = ["var(--s1)", "var(--s2)", "var(--s3)"], gcol = g => GCOL[GAMMAS.indexOf(g) % 3];
+const get = (d, g) => SP.find(c => c.draft === d && c.gamma === g);
+const best = SP.slice().sort((x, y) => y.speedup - x.speedup)[0], worst = SP.slice().sort((x, y) => x.speedup - y.speedup)[0];
+const short = d => d.replace("Qwen3.5-", ""), B = n => fmt(n / 1e9, n < 2e9 ? 2 : 1) + "B";
+
+/* ---- lead, verdict, tiles ---- */
+$("#lead").textContent = `Benchmark run ${D.run} (Rhea job ${D.job}, ${D.date}): the cricket-tuned Qwen3.8-27B answered ${D.questions} held-out T20 cricket questions on its own and with each of ${DRAFTS.length} small draft models, at ${GAMMAS.join(", ")} guesses per round. One prompt at a time, on ${D.gpus} Vera Rubin GPUs.`;
+$("#verdict").innerHTML = `<b>No. Every draft made the target slower.</b> The target alone wrote ${fmt(BASE.tokens_per_s)} tokens a second. With a draft it wrote ${fmt(worst.tokens_per_s)} to ${fmt(best.tokens_per_s)}. The best configuration, ${best.draft} with ${best.gamma} guesses per round, ran at ${fmt(best.speedup, 2)} times the speed of the target alone. Accuracy was ${pct(BASE.accuracy)} in every configuration.`;
+const tile = (k, v, d) => `<div class="card tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
+$("#tiles").innerHTML =
+  tile("Target alone", `${fmt(BASE.tokens_per_s)} <small>tokens/s</small>`, `${fmt(BASE.sec_per_answer, 2)} s per answer of ${fmt(BASE.mean_tokens)} tokens`) +
+  tile("Best with a draft", `${fmt(best.tokens_per_s)} <small>tokens/s</small>`, `${fmt(best.speedup, 2)}x, ${best.draft}, ${best.gamma} guesses per round`) +
+  tile("Worst with a draft", `${fmt(worst.tokens_per_s)} <small>tokens/s</small>`, `${fmt(worst.speedup, 2)}x, ${worst.draft}, ${worst.gamma} guesses per round`) +
+  tile("Guesses accepted", `${pct(Math.min(...SP.map(c => c.acceptance)))} <small>to</small> ${pct(Math.max(...SP.map(c => c.acceptance)))}`, `gaining ${fmt(Math.min(...SP.map(c => c.tokens_per_target_pass)), 1)} to ${fmt(Math.max(...SP.map(c => c.tokens_per_target_pass)), 1)} tokens per target pass`) +
+  tile("Accuracy", pct(BASE.accuracy), `${C.reduce((s, c) => s + c.correct, 0).toLocaleString("en-US")} of ${C.reduce((s, c) => s + c.answers, 0).toLocaleString("en-US")} answers correct across all configurations`) +
+  tile("Run", `${fmt(D.elapsed_s / 60)} min`, `${D.gpus} GPUs on ${D.nodes.length} nodes, ${fmt(D.gpus * D.elapsed_s / 3600, 1)} GPU-hours, ${D.start} to ${D.end}`);
+
+/* ---- grouped horizontal bars: one group per draft, one bar per gamma, optional reference line ---- */
+function grouped(id, key, vf, ref, tipf) {
+  const svg = $(id), l = 92, r0 = 58, top = 8, bh = 15, gh = GAMMAS.length * (bh + 2) + 14, H = top + DRAFTS.length * gh + 26;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img");
+  const raw = Math.max(ref ? ref[0] : 0, ...SP.map(c => c[key])), stp = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 25, 50].find(s => raw / s <= 6), mx = Math.ceil(raw / stp - 1e-9) * stp, X = v => l + v / mx * (W - l - r0);
+  for (let v = 0; v <= mx + 1e-9; v += stp) { svg.appendChild(el("line", { x1: X(v), x2: X(v), y1: top, y2: H - 26, stroke: "var(--grid)" })); svg.appendChild(el("text", { x: X(v), y: H - 9, "text-anchor": "middle" }, vf(v, true))); }
+  DRAFTS.forEach((d, i) => {
+    const y = top + i * gh; svg.appendChild(el("text", { x: l - 10, y: y + gh / 2, "text-anchor": "end", class: "lab" }, short(d)));
+    GAMMAS.forEach((g, k) => { const c = get(d, g); if (!c) return; const v = c[key], yy = y + 4 + k * (bh + 2), w = Math.max(1.5, X(v) - l), q = Math.min(4, w);
+      const bar = el("path", { d: `M${l} ${yy}H${l + w - q}q${q} 0 ${q} 4v${bh - 8}q0 4 -${q} 4H${l}Z`, fill: gcol(g) }); svg.appendChild(bar);
+      svg.appendChild(el("text", { x: l + w + 5, y: yy + bh - 3 }, vf(v)));
+      hover(bar, tipf(c)); });
+  });
+  if (ref) { svg.appendChild(el("line", { x1: X(ref[0]), x2: X(ref[0]), y1: top - 4, y2: H - 26, stroke: "var(--text)", "stroke-dasharray": "4 3", "stroke-width": 1.5 })); svg.appendChild(el("text", { x: X(ref[0]) - 5, y: H - 30, "text-anchor": "end", class: "lab" }, ref[1])); }
+}
+const tipC = c => `<b>${c.draft}, ${c.gamma} guesses per round</b><br>${fmt(c.tokens_per_s, 1)} tokens/s (${fmt(c.speedup, 2)}x the target alone)<br>${fmt(c.sec_per_answer, 2)} s per answer<br>${pct(c.acceptance)} of guesses accepted<br>${fmt(c.tokens_per_target_pass, 2)} tokens per target pass`;
+grouped("#cSpeed", "tokens_per_s", (v, ax) => fmt(v, ax ? 0 : 1), [BASE.tokens_per_s, `alone ${fmt(BASE.tokens_per_s, 1)}`], tipC);
+grouped("#cLat", "sec_per_answer", (v, ax) => fmt(v, ax ? 0 : 2) + (ax ? "" : " s"), [BASE.sec_per_answer, `alone ${fmt(BASE.sec_per_answer, 2)} s`], tipC);
+grouped("#cAcc", "acceptance", v => pct(v), null, tipC);
+grouped("#cTpp", "tokens_per_target_pass", (v, ax) => fmt(v, ax ? 1 : 2), [1, "no gain"], tipC);
+$("#lgGamma").innerHTML = GAMMAS.map(g => `<span><i style="background:${gcol(g)}"></i>${g} guesses per round</span>`).join("");
+$("#speedSub").textContent = `The target alone wrote ${fmt(BASE.tokens_per_s, 1)} tokens a second through the benchmark's own decoding loop and ${fmt(HF.tokens_per_s, 1)} through the library's generate(), so the comparison baseline is fair. All ${SP.length} draft configurations were slower, and longer rounds were slower still.`;
+
+/* ---- why: stacked time per answer ---- */
+(() => {
+  const rows = [BASE, ...SP], svg = $("#cWhy"), WW = 1040, l = 190, r0 = 150, top = 6, bh = 16, rh = 24, H = top + rows.length * rh + 26;
+  svg.setAttribute("viewBox", `0 0 ${WW} ${H}`); svg.setAttribute("role", "img");
+  const tT = c => c.ms_target * c.target_calls / 1000, tD = c => c.ms_draft * c.draft_calls / 1000;
+  const mx = Math.ceil(Math.max(...rows.map(c => tT(c) + tD(c)))), X = v => l + v / mx * (WW - l - r0);
+  for (let v = 0; v <= mx; v++) { svg.appendChild(el("line", { x1: X(v), x2: X(v), y1: top, y2: H - 26, stroke: "var(--grid)" })); svg.appendChild(el("text", { x: X(v), y: H - 9, "text-anchor": "middle" }, v === 0 ? "0 s" : v)); }
+  rows.forEach((c, i) => { const y = top + i * rh, a = tT(c), b = tD(c);
+    svg.appendChild(el("text", { x: l - 10, y: y + bh - 3, "text-anchor": "end", class: "lab" }, c.draft ? `${short(c.draft)}, ${c.gamma} per round` : "Target alone"));
+    const r1 = el("rect", { x: l, y, width: Math.max(1, X(a) - l), height: bh, fill: "var(--base)", rx: 2 }); svg.appendChild(r1);
+    hover(r1, `<b>${c.config}: target</b><br>${fmt(c.target_calls)} passes x ${fmt(c.ms_target)} ms = ${fmt(a, 2)} s`);
+    if (b > 0) { const r2 = el("rect", { x: X(a) + 2, y, width: Math.max(1, X(a + b) - X(a) - 2), height: bh, fill: "var(--s2)", rx: 2 }); svg.appendChild(r2);
+      hover(r2, `<b>${c.config}: draft</b><br>${fmt(c.draft_calls)} passes x ${fmt(c.ms_draft, 1)} ms = ${fmt(b, 2)} s`); }
+    svg.appendChild(el("text", { x: X(a + b) + 8, y: y + bh - 3 }, `${fmt(a + b, 2)} s${c.draft ? ` (${pct(b / (a + b))} draft)` : ""}`)); });
+})();
+const dPass = avgOf(SP.map(c => c.ms_draft)), dShare = avgOf(SP.map(c => c.ms_draft * c.draft_calls / (c.ms_draft * c.draft_calls + c.ms_target * c.target_calls)));
+$("#whySub").textContent = `One pass through the target takes about ${fmt(BASE.ms_target)} ms when it writes one token at a time. A draft does cut the number of target passes, from ${fmt(BASE.target_calls)} per answer to between ${fmt(Math.min(...SP.map(c => c.target_calls)))} and ${fmt(Math.max(...SP.map(c => c.target_calls)))}. But each draft pass costs about ${fmt(Math.min(...SP.map(c => c.ms_draft)))} to ${fmt(Math.max(...SP.map(c => c.ms_draft)))} ms, a draft needs ${fmt(Math.min(...SP.map(c => c.draft_calls)))} to ${fmt(Math.max(...SP.map(c => c.draft_calls)))} passes per answer, and a checking round costs about ${fmt(avgOf(SP.map(c => c.ms_target)))} ms, about ${fmt(avgOf(SP.map(c => c.ms_target)) / BASE.ms_target, 1)} times a plain pass, because it processes several tokens and copies both models' caches so that a rejected round can be undone. Draft passes take ${pct(dShare)} of the time on average.`;
+$("#passTbl").innerHTML = `<tr><th>Configuration</th><th>Layers in draft</th><th>Target passes per answer</th><th>Draft passes per answer</th><th>Estimated ms per target round</th><th>Estimated ms per draft pass</th><th>Draft pass as share of a plain target pass</th></tr>` +
+  [BASE, ...SP].map(c => `<tr><td>${c.draft ? `${c.draft}, ${c.gamma} per round` : "Target alone (64 layers)"}</td><td>${c.draft ? D.arch[c.draft] : ""}</td><td>${fmt(c.target_calls)}</td><td>${c.draft ? fmt(c.draft_calls) : ""}</td><td>${fmt(c.ms_target)}</td><td>${c.draft ? fmt(c.ms_draft, 1) : ""}</td><td>${c.draft ? pct(c.ms_draft / BASE.ms_target) : ""}</td></tr>`).join("");
+
+/* ---- selectors, histogram, question types ---- */
+$("#selDraft").innerHTML = DRAFTS.map(d => `<option${d === best.draft ? " selected" : ""}>${d}</option>`).join("");
+$("#selGamma").innerHTML = GAMMAS.map(g => `<option${g === best.gamma ? " selected" : ""}>${g}</option>`).join("");
+const sel = () => get($("#selDraft").value, +$("#selGamma").value);
+const QT = { run_rate: "Run rate", chase_rate: "Chase rate", milestone: "Milestone" };
+function drawSel() {
+  const c = sel(), svg = $("#cHist"), H = 220, l = 40, r0 = 12, top = 10, bt = 26, lo = 0.2, hi = 1.6, stp = 0.1, nb = Math.round((hi - lo) / stp);
+  const cnt = Array(nb).fill(0); c.ratio.forEach(v => cnt[Math.max(0, Math.min(nb - 1, Math.floor((v - lo) / stp)))]++);
+  svg.innerHTML = ""; svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img");
+  const my = Math.ceil(Math.max(...cnt) / 10) * 10, X = v => l + (v - lo) / (hi - lo) * (W - l - r0), Y = v => top + (1 - v / my) * (H - top - bt);
+  for (let v = 0; v <= my; v += my / 5 >= 10 ? Math.ceil(my / 50) * 10 : 10) { svg.appendChild(el("line", { x1: l, x2: W - r0, y1: Y(v), y2: Y(v), stroke: "var(--grid)" })); svg.appendChild(el("text", { x: l - 6, y: Y(v) + 4, "text-anchor": "end" }, v)); }
+  cnt.forEach((n, i) => { if (!n) return; const x0 = X(lo + i * stp), x1 = X(lo + (i + 1) * stp), y = Y(n);
+    const bar = el("rect", { x: x0 + 1, y, width: x1 - x0 - 2, height: Y(0) - y, fill: lo + i * stp >= 1 ? "var(--s3)" : "var(--s1)", rx: 2 }); svg.appendChild(bar);
+    hover(bar, `<b>${fmt(lo + i * stp, 1)}x to ${fmt(lo + (i + 1) * stp, 1)}x</b><br>${n} of ${c.ratio.length} questions`); });
+  for (let v = lo; v <= hi + 1e-9; v += 0.2) svg.appendChild(el("text", { x: X(v), y: H - 8, "text-anchor": "middle" }, fmt(v, 1) + "x"));
+  svg.appendChild(el("line", { x1: X(1), x2: X(1), y1: top, y2: Y(0), stroke: "var(--text)", "stroke-dasharray": "4 3", "stroke-width": 1.5 }));
+  svg.appendChild(el("text", { x: X(1) + 5, y: top + 10, class: "lab" }, "same speed"));
+  const faster = c.ratio.filter(v => v > 1).length, srt = c.ratio.slice().sort((x, y) => x - y);
+  $("#histH").textContent = `${c.draft}, ${c.gamma} guesses per round: speed against the target alone`;
+  $("#histNote").textContent = `${faster} of ${c.ratio.length} questions were faster with the draft. Median ${fmt(srt[Math.floor(srt.length / 2)], 2)}x, range ${fmt(srt[0], 2)}x to ${fmt(srt[srt.length - 1], 2)}x.`;
+  $("#qtTbl").innerHTML = `<tr><th>Question type</th><th>Tokens/s</th><th>Against target alone</th><th>Guesses accepted</th><th>Tokens per answer</th><th>Accuracy</th></tr>` +
+    Object.keys(QT).filter(q => c.qtype[q]).map(q => `<tr><td>${QT[q]}</td><td>${fmt(c.qtype[q].tokens_per_s, 1)}</td><td>${fmt(c.qtype[q].speedup, 2)}x</td><td>${pct(c.qtype[q].acceptance)}</td><td>${fmt(c.qtype[q].mean_tokens)}</td><td>${pct(c.qtype[q].accuracy)}</td></tr>`).join("") +
+    `<tr><td>All</td><td>${fmt(c.tokens_per_s, 1)}</td><td>${fmt(c.speedup, 2)}x</td><td>${pct(c.acceptance)}</td><td>${fmt(c.mean_tokens)}</td><td>${pct(c.accuracy)}</td></tr>`;
+}
+
+/* ---- replay: simulated race ---- */
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const NTOK = Math.round(BASE.mean_tokens);
+let sim, cur = 0, playing = false, last = 0;
+function build() {
+  const c = sel(), g = c.gamma, target = c.acceptance * g;  // expected accepted guesses per round
+  let lo = 0, hi = 0.999; for (let i = 0; i < 40; i++) { const p = (lo + hi) / 2; let e = 0, q = 1; for (let k = 0; k < g; k++) { q *= p; e += q; } if (e < target) lo = p; else hi = p; }
+  const p = (lo + hi) / 2, rnd = rng(7), ev = []; let t = 0, n = 0, tp = 0, dp = 0;
+  while (n < NTOK) { const k = Math.min(g, NTOK - n); let acc = 0; while (acc < k && rnd() < p) acc++;
+    const t0 = t, tDraft = t + k * c.ms_draft; t = tDraft + c.ms_target; tp++; dp += k;
+    const add = Math.min(NTOK - n, acc + 1);
+    ev.push({ t0, tDraft, t1: t, n0: n, k, acc: Math.min(acc, add), add, tp, dp }); n += add; }
+  sim = { c, p, ev, tEnd: t, baseEnd: NTOK * BASE.ms_target, T: Math.max(t, NTOK * BASE.ms_target) };
+  $("#race").innerHTML = [["Target alone", "var(--base)"], [`Target + ${c.draft}`, "var(--s1)"]].map(x => `<div class="lane" style="--c:${x[1]}"><div class="nm"><span class="sw" style="background:${x[1]}"></span>${x[0]}</div><div class="st"></div><div class="toks">${"<i></i>".repeat(NTOK)}</div><div class="ro"></div></div>`).join("");
+  $("#simNote").textContent = `Simulation of one ${NTOK}-token answer. Per-guess acceptance is set to ${pct(p)} so that the share of accepted guesses matches the measured ${pct(c.acceptance)}; one draft pass is taken as ${fmt(c.ms_draft, 1)} ms and one checking round as ${fmt(c.ms_target)} ms (estimates from this run), one plain target pass as ${fmt(BASE.ms_target)} ms. Measured result for this configuration: ${fmt(c.tokens_per_s, 1)} tokens/s against ${fmt(BASE.tokens_per_s, 1)} alone.`;
+  cur = STILL ? sim.T : 0; playing = false; $("#play").textContent = "Play"; draw(); drawSel(); archSel();
+}
+function draw() {
+  const [L0, L1] = [...document.querySelectorAll(".lane")], ms = cur, ro = x => x.map(v => `<div><div class="k">${v[0]}</div><div class="v">${v[1]}</div></div>`).join("");
+  $("#clock").textContent = `${fmt(ms / 1000, 2)} s of ${fmt(sim.T / 1000, 2)} s`;
+  const nb = Math.min(NTOK, Math.floor(ms / BASE.ms_target));
+  [...L0.querySelectorAll(".toks i")].forEach((x, i) => x.className = i < nb ? "t" : "");
+  L0.querySelector(".st").innerHTML = nb >= NTOK ? `<b>Finished</b> in ${fmt(sim.baseEnd / 1000, 2)} s.` : `<b>Writing token ${nb + 1}.</b> One target pass per token.`;
+  L0.querySelector(".ro").innerHTML = ro([["Tokens", nb], ["Target passes", nb], ["Tokens/s", ms > 0 ? fmt(nb / Math.min(ms, sim.baseEnd) * 1000, 1) : "0"]]);
+  const cells = [...L1.querySelectorAll(".toks i")]; cells.forEach(x => x.className = "");
+  let n = 0, tp = 0, dp = 0, st = `<b>Finished</b> in ${fmt(sim.tEnd / 1000, 2)} s.`;
+  for (const e of sim.ev) {
+    if (ms >= e.t1) { for (let i = 0; i < e.add; i++) cells[e.n0 + i].className = i < e.acc ? "a" : "t"; n = e.n0 + e.add; tp = e.tp; dp = e.dp; continue; }
+    if (ms >= e.t0) { const made = ms >= e.tDraft ? e.k : Math.min(e.k, Math.floor((ms - e.t0) / sim.c.ms_draft) + 1);
+      for (let i = 0; i < made && e.n0 + i < NTOK; i++) cells[e.n0 + i].className = "g";
+      dp = e.dp - e.k + made; tp = e.tp - 1;
+      st = ms >= e.tDraft ? `<b>Target is checking ${e.k} guesses</b> in one pass.` : `<b>Draft is guessing</b> token ${made} of ${e.k} for this round.`; }
+    break;
+  }
+  L1.querySelector(".st").innerHTML = st;
+  L1.querySelector(".ro").innerHTML = ro([["Tokens", n], ["Target passes", tp], ["Draft passes", dp]]);
+}
+function tick(t) { if (!playing) return; const dt = Math.min(100, t - last); last = t; cur += dt * +$("#speed").value; if (cur >= sim.T) { cur = sim.T; playing = false; $("#play").textContent = "Replay"; draw(); return; } draw(); requestAnimationFrame(tick); }
+$("#play").addEventListener("click", () => { if (playing) { playing = false; $("#play").textContent = "Resume"; return; } if (cur >= sim.T) cur = 0; playing = true; $("#play").textContent = "Pause"; last = performance.now(); requestAnimationFrame(tick); });
+$("#selDraft").addEventListener("change", build); $("#selGamma").addEventListener("change", build);
+
+/* ---- GPU charts ---- */
+const G = D.gpu, NB = G.util[0].length, NCOL = ["var(--s1)", "var(--s2)"];
+function lines(id, key, y1, yt, yf, cap) {
+  const svg = $(id), H = 220, M = { l: 46, r: 14, t: 10, b: 24 }, iw = W - M.l - M.r, ih = H - M.t - M.b; svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img");
+  const X = v => M.l + v / NB * iw, Y = v => M.t + (1 - v / y1) * ih;
+  yt.forEach(v => { svg.appendChild(el("line", { x1: M.l, x2: W - M.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)" })); svg.appendChild(el("text", { x: M.l - 6, y: Y(v) + 4, "text-anchor": "end" }, yf(v))); });
+  for (let m = 0; m <= NB; m += 10) svg.appendChild(el("text", { x: X(m), y: H - 6, "text-anchor": "middle" }, m === 0 ? "0 min" : m));
+  if (cap) { svg.appendChild(el("line", { x1: M.l, x2: W - M.r, y1: Y(cap), y2: Y(cap), stroke: "var(--text2)", "stroke-dasharray": "4 4" })); svg.appendChild(el("text", { x: W - M.r, y: Y(cap) - 5, "text-anchor": "end" }, cap + " GB capacity")); }
+  const ser = D.nodes.map((n, i) => Array.from({ length: NB }, (_, m) => avgOf(G[key].slice(i * 4, i * 4 + 4).map(r => r[m]))));
+  ser.forEach((s, i) => { let d = "", pen = false; s.forEach((v, m) => { if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + X(m + 0.5).toFixed(1) + " " + Y(v).toFixed(1); pen = true; }); svg.appendChild(el("path", { d, fill: "none", stroke: NCOL[i % 2], "stroke-width": 2, "stroke-linejoin": "round" })); });
+  const ov = el("rect", { x: M.l, y: M.t, width: iw, height: ih, fill: "transparent" }); svg.appendChild(ov);
+  ov.addEventListener("mousemove", e => { const bb = ov.getBoundingClientRect(), m = Math.max(0, Math.min(NB - 1, Math.floor((e.clientX - bb.left) / bb.width * NB))); showTip(e, `<b>Minute ${m + 1}</b>` + ser.map((s, i) => `<br>${D.nodes[i]}: ${s[m] == null ? "no reading" : yf(Math.round(s[m]))}`).join("")); });
+  ov.addEventListener("mouseleave", hideTip);
+}
+lines("#gUtil", "util", 100, [0, 25, 50, 75, 100], v => v + "%");
+lines("#gMem", "mem", 300, [0, 100, 200, 300], v => v + " GB", CAP);
+$("#lgNode").innerHTML = D.nodes.map((n, i) => `<span><i style="background:${NCOL[i % 2]}"></i>${n} (GPUs ${i * 4} to ${i * 4 + 3})</span>`).join("");
+(() => {
+  const svg = $("#gHeat"), WW = 1040, l = 110, rr = 12, t = 4, rh = 16, bt = 22, iw = WW - l - rr, cw = iw / NB, rowY = g => t + g * rh + Math.floor(g / 4) * 6, hh = rowY(D.gpus - 1) + rh - t, H = t + hh + bt;
+  svg.setAttribute("viewBox", `0 0 ${WW} ${H}`); svg.setAttribute("role", "img");
+  for (let g = 0; g < D.gpus; g++) svg.appendChild(el("text", { x: l - 8, y: rowY(g) + rh - 4, "text-anchor": "end" }, `${D.nodes[Math.floor(g / 4)]} GPU ${g % 4}`));
+  G.util.forEach((row, g) => row.forEach((v, m) => { if (v != null) svg.appendChild(el("rect", { x: l + m * cw, y: rowY(g), width: cw - 1, height: rh - 2, fill: "var(--s1)", opacity: (0.06 + 0.94 * v / 100).toFixed(3) })); }));
+  for (let m = 0; m <= NB; m += 5) svg.appendChild(el("text", { x: l + m * cw, y: H - 6, "text-anchor": "middle" }, m === 0 ? "0 min" : m));
+  const ov = el("rect", { x: l, y: t, width: iw, height: hh, fill: "transparent" }); svg.appendChild(ov);
+  ov.addEventListener("mousemove", e => { const bb = ov.getBoundingClientRect(), m = Math.max(0, Math.min(NB - 1, Math.floor((e.clientX - bb.left) / bb.width * NB))), yy = (e.clientY - bb.top) / bb.height * hh; let g = 0; for (let k = 0; k < D.gpus; k++) if (yy >= rowY(k) - t) g = k;
+    showTip(e, `<b>${D.nodes[Math.floor(g / 4)]}, GPU ${g % 4}</b><br>Minute ${m + 1}: ${G.util[g][m] == null ? "no reading" : `${fmt(G.util[g][m])}% busy, ${fmt(G.mem[g][m])} GB, ${fmt(G.pow[g][m])} W`}`); });
+  ov.addEventListener("mouseleave", hideTip);
+})();
+$("#gpuSub").textContent = `Each of the ${D.gpus} GPUs held the target and all ${DRAFTS.length} drafts and worked through its ${D.questions / D.gpus} questions, cycling through all ${C.length} configurations per question. nvidia-smi logged every GPU every 15 seconds (${fmt(G.readings)} readings). Utilisation averaged ${fmt(G.util_avg)}%, memory averaged ${fmt(G.mem_avg)} GB and peaked at ${fmt(G.mem_peak)} GB of ${CAP} GB, and power averaged ${fmt(G.pow_avg)} W. A minute of readings mixes several configurations, so these charts describe the run, not any one configuration.`;
+$("#minTbl").innerHTML = `<tr><th>Minute</th>${D.nodes.map(n => `<th>${n} busy %</th><th>lowest to highest GPU</th><th>memory GB</th><th>power W</th>`).join("")}</tr>` +
+  Array.from({ length: NB }, (_, m) => `<tr><td>${m + 1}</td>${D.nodes.map((n, i) => { const u = G.util.slice(i * 4, i * 4 + 4).map(r => r[m]).filter(v => v != null); return u.length ? `<td>${fmt(avgOf(u))}</td><td>${fmt(Math.min(...u))} to ${fmt(Math.max(...u))}</td><td>${fmt(avgOf(G.mem.slice(i * 4, i * 4 + 4).map(r => r[m])))}</td><td>${fmt(avgOf(G.pow.slice(i * 4, i * 4 + 4).map(r => r[m])))}</td>` : "<td></td>".repeat(4); }).join("")}</tr>`).join("");
+
+/* ---- findings and insights ---- */
+$("#f1").innerHTML = li([
+  `<b>What happened.</b> The first test job failed: transformers 5.22.2 raises "assisted generation is not supported with stateful models" for the Qwen3.5 model family, which includes both targets and all four drafts.`,
+  `<b>Why.</b> Three of every four layers use linear attention, which keeps a running state. When a guess is rejected, that state cannot be rewound the way an ordinary attention cache can.`,
+  `<b>What was done.</b> The benchmark has its own decoding loop. It copies each model's cache before a round and restores the copy when a guess is rejected. With greedy decoding its answers matched the target-only answers in a test on 8 questions (8 of 8 with the 0.8B draft, 7 of 8 with the others, all correct).`]);
+$("#f2").innerHTML = li([
+  `<b>What happened.</b> In the first tests the target alone ran at about 8 tokens a second, while an isolated test of the same loop ran at about 40.`,
+  `<b>Why.</b> The cuDNN attention kernel costs about 5 ms per call the first time it sees a sequence length. Decoding changes the length on every token, so every fresh prompt paid it in all 16 full-attention layers. Four other explanations were tested and ruled out first.`,
+  `<b>What was done.</b> The benchmark switches that kernel off. In this run the target alone reached ${fmt(BASE.tokens_per_s)} tokens a second on fresh prompts.`,
+  `<b>Open question.</b> The RLVR training and evaluation scripts do not switch it off. Whether they pay the same cost has not been measured.`]);
+const hyp = c => BASE.sec_per_answer / ((c.target_calls * BASE.ms_target + c.draft_calls * c.ms_draft) / 1000), hbest = SP.slice().sort((x, y) => hyp(y) - hyp(x))[0];
+const g2 = GAMMAS[0], g8 = GAMMAS[GAMMAS.length - 1], big = DRAFTS[DRAFTS.length - 1], small = DRAFTS[0];
+$("#insA").innerHTML = li([
+  `<b>No configuration beat the target alone.</b> Speeds ranged from ${fmt(worst.speedup, 2)}x to ${fmt(best.speedup, 2)}x. Fewer guesses per round was always faster: ${GAMMAS.map(g => `${fmt(avgOf(DRAFTS.map(d => get(d, g).speedup)), 2)}x at ${g}`).join(", ")} on average.`,
+  `<b>Bigger drafts guess better but cost more.</b> At ${g2} guesses per round, acceptance rose from ${pct(get(small, g2).acceptance)} with ${short(small)} to ${pct(get(big, g2).acceptance)} with ${short(big)}, yet speed stayed between ${fmt(Math.min(...DRAFTS.map(d => get(d, g2).speedup)), 2)}x and ${fmt(Math.max(...DRAFTS.map(d => get(d, g2).speedup)), 2)}x.`,
+  `<b>A draft pass is not cheap here.</b> It costs about ${pct(Math.min(...SP.map(c => c.ms_draft)) / BASE.ms_target)} to ${pct(Math.max(...SP.map(c => c.ms_draft)) / BASE.ms_target)} of a plain target pass, although the drafts have 3% to 36% of the target's parameters. One prompt at a time, time per pass follows the number of layers (24 or 32 against 64) more than the number of parameters. This reading is an interpretation of the fitted pass times, not a separate measurement.`,
+  `<b>The checking round is expensive in this implementation.</b> It costs about ${fmt(avgOf(SP.map(c => c.ms_target)))} ms against ${fmt(BASE.ms_target)} ms for a plain pass. Rollback for these models needs cache copies, and multi-token passes use a plain PyTorch kernel. This overhead belongs to the decoding loop written for this benchmark, not to speculative decoding as such.`,
+  `<b>Long rounds waste guesses.</b> At ${g8} guesses per round only ${pct(Math.min(...DRAFTS.map(d => get(d, g8).acceptance)))} to ${pct(Math.max(...DRAFTS.map(d => get(d, g8).acceptance)))} of guesses were kept.`,
+  `<b>Answers were unchanged in quality.</b> Accuracy was ${pct(BASE.accuracy)} and answers averaged ${fmt(Math.min(...C.map(c => c.mean_tokens)))} to ${fmt(Math.max(...C.map(c => c.mean_tokens)))} tokens in every configuration, as speculative sampling should give.`]);
+$("#insB").innerHTML = li([
+  `<b>A cheaper checking round.</b> If a checking round cost the same as a plain pass, the fitted numbers put the best configuration (${hbest.draft}, ${hbest.gamma} guesses per round) at about ${fmt(hyp(hbest), 2)}x. That is an estimate from the fit, not a measurement, and it is still a small gain.`,
+  `<b>A draft trained to imitate the tuned target.</b> The drafts are untuned and older than the target, which writes very short answers. Fine-tuning a draft on the same cricket data should raise acceptance.`,
+  `<b>Compiled passes.</b> If per-layer overhead dominates, compiling the draft's and target's forward passes would cut it. It would also speed up the target alone, so the net effect is unknown.`,
+  `<b>A shallower draft.</b> Pass time follows depth; a draft with far fewer layers would be cheaper per guess. None with this tokenizer exists on Hugging Face today.`,
+  `<b>A target with long answers.</b> The untuned target writes about six times more tokens per answer. Speculation may behave differently there.`,
+  `<b>Batched serving.</b> This benchmark measures one prompt at a time. A serving engine that batches requests has a different cost balance.`]);
+$("#caveat").textContent = `Limits: one answer per question per configuration, sampled, so per-question speeds are noisy. The per-pass times are estimates from a two-term fit, and the checking pass includes cache copying. The replay is a simulation. Only the cricket-tuned Qwen3.8-27B target was benchmarked.`;
+
+/* ---- tables ---- */
+$("#models").innerHTML = `<tr><th>Model</th><th class="l">Role</th><th>Parameters</th><th>Layers</th></tr>` +
+  [["Qwen/Qwen3.8-27B + RLVR adapter cricket-rlvr-1114", "Target: the model whose answers are wanted, only faster. The adapter makes it the cricket-tuned model.", B(D.target_params), D.arch["Qwen3.8-27B"]],
+   ...DRAFTS.map(d => [`Qwen/${d}`, "Draft: guesses the next tokens for the target to check. Used as downloaded, not fine-tuned.", B(D.drafts[d]), D.arch[d]]),
+   ["Dataset Balab2021/CricketData-T20-Reasoning-Qwen3.8-Full", `Source of the ${D.questions} held-out questions with exact answers.`, "", ""]]
+    .map(r => `<tr><td>${r[0]}</td><td class="l">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join("");
+$("#jobs").innerHTML = `<tr><th class="l">Job</th><th class="l">What it did</th><th>Nodes</th><th class="l">Outcome</th></tr>` +
+  [[120135, "Downloaded the four drafts to Lustre and checked their vocabulary against the target", 1, "Completed"],
+   [120136, "First smoke test, through the library's assisted generation", 1, "Failed: not supported for these models"],
+   ["120182, 120183", "Smoke tests of the hand-written loop, sampling and greedy, 8 questions", 1, "Completed; correct but slow"],
+   [120269, "Upload of smoke results to the private Hugging Face repo", 1, "Completed"],
+   ["120328 to 120720", "Nine short diagnostic jobs to find the slowdown", 1, "Cause found: cuDNN attention kernel"],
+   [D.job, `Full benchmark: ${D.questions} questions, ${C.length} configurations, W&B logging and upload`, D.nodes.length, `Completed in ${fmt(D.elapsed_s / 60)} min`]]
+    .map(j => `<tr><td class="l">${j[0]}</td><td class="l">${j[1]}</td><td>${j[2]}</td><td class="l">${j[3]}</td></tr>`).join("");
+$("#where").innerHTML = `<tr><th>Item</th><th class="l">Location</th></tr>` +
+  [["Records, summary, GPU logs (Lustre)", `/lustre/fsw/general_sa/bbalakreshna/cricket-rhea/specdec/${D.run}/`], ["Draft weights (Lustre)", "/lustre/fsw/general_sa/bbalakreshna/models/Qwen3.5-*"],
+   ["W&B project / run", D.wandb], ["Hugging Face (private dataset repo)", `Balab2021/Cricket-SpecDec-Rhea, folder ${D.run}`], ["Code", "rhea/specdec/ (cluster: ~/clustercodes/specdec)"]]
+    .map(x => `<tr><td>${x[0]}</td><td class="l">${x[1]}</td></tr>`).join("");
+$("#allTbl").innerHTML = `<tr><th>Configuration</th><th>Guesses per round</th><th>Tokens/s</th><th>Against target alone</th><th>Seconds per answer</th><th>Guesses accepted</th><th>Tokens per target pass</th><th>Tokens per answer</th><th>Accuracy</th></tr>` +
+  C.map(c => `<tr><td>${c.draft ? c.draft : c.config === "baseline" ? "Target alone (benchmark loop)" : "Target alone (library generate)"}</td><td>${c.gamma || ""}</td><td>${fmt(c.tokens_per_s, 1)}</td><td>${fmt(c.speedup, 2)}x</td><td>${fmt(c.sec_per_answer, 2)}</td><td>${c.acceptance == null ? "" : pct(c.acceptance)}</td><td>${fmt(c.tokens_per_target_pass, 2)}</td><td>${fmt(c.mean_tokens)}</td><td>${pct(c.accuracy)}</td></tr>`).join("");
+
+/* ---- architecture: one round, step by step ---- */
+const STEPS = [
+  ["1. Read the prompt", "Both models read the question once and build their caches.", "draft + target"],
+  ["2. Save state", "A copy of each model's cache is kept, so the round can be undone.", "both caches"],
+  ["3. Draft guesses", "The draft writes the next tokens, one pass per token.", "draft, 4 passes"],
+  ["4. Target checks", "The target reads all the guesses in one pass and scores each one.", "target, 1 pass"],
+  ["5. Accept or reject", "Guesses are kept until the first one the target disagrees with. The target supplies that token itself.", "speculative sampling"],
+  ["6. Undo and continue", "The saved copies are restored. The kept tokens are fed again with the next round.", "back to step 2"]];
+const EX = { prompt: ["Run", "rate", "="], guess: ["142", "/", "17", ".3"], fix: "18", bad: 2 };
+$("#steps").innerHTML = STEPS.map(x => `<div><b>${x[0]}</b><span>${x[1]}</span><div class="who">${x[2]}</div></div>`).join("");
+let aStep = STILL ? 4 : 0, aSub = 0, aRun = !STILL, aTimer = null;
+function archDraw() {
+  [...document.querySelectorAll("#steps > div")].forEach((d, i) => d.classList.toggle("on", i === aStep));
+  const tk = (t, c) => `<span class="tk ${c}">${t}</span>`;
+  let row = `<span class="lbl">Tokens</span>` + EX.prompt.map(t => tk(t, "p")).join(""), note = "";
+  if (aStep === 0) note = "The prompt is in both caches. Nothing has been generated yet.";
+  if (aStep === 1) note = "Snapshot taken. These models need one because the running state of their linear-attention layers cannot be rewound.";
+  if (aStep === 2) { const n = Math.min(EX.guess.length, aSub + 1); row += EX.guess.slice(0, n).map(t => tk(t, "g")).join(""); note = `The draft has written ${n} of ${EX.guess.length} guesses. Each guess is one pass through the draft.`; }
+  if (aStep === 3) { row += EX.guess.map(t => tk(t, "g")).join(""); note = "One target pass covers all four guesses and also predicts the token after them."; }
+  if (aStep === 4) { row += EX.guess.map((t, i) => tk(t, i < EX.bad ? "a" : i === EX.bad ? "r" : "x")).join("") + tk(EX.fix, "t"); note = `The first two guesses are accepted. The third is rejected, so the target writes "${EX.fix}" instead and the fourth guess is thrown away. This round produced 3 tokens for 1 target pass and 4 draft passes.`; }
+  if (aStep === 5) { row += EX.guess.slice(0, EX.bad).map(t => tk(t, "a")).join("") + tk(EX.fix, "t"); note = "Both caches go back to the snapshot. The three new tokens are read again at the start of the next round, in the same target pass that checks the next guesses."; }
+  $("#exrow").innerHTML = row; $("#exnote").textContent = note; $("#archStep").textContent = `Step ${aStep + 1} of ${STEPS.length}`;
+}
+function archTick() { if (aStep === 2 && aSub < EX.guess.length - 1) aSub++; else { aStep = (aStep + 1) % STEPS.length; aSub = 0; } archDraw(); }
+function archRun() { clearInterval(aTimer); if (aRun) aTimer = setInterval(archTick, 1300); $("#archPlay").textContent = aRun ? "Pause" : "Play"; }
+$("#archPlay").addEventListener("click", () => { aRun = !aRun; archRun(); });
+[...document.querySelectorAll("#steps > div")].forEach((d, i) => { d.style.cursor = "pointer"; d.addEventListener("click", () => { aRun = false; aStep = i; aSub = i === 2 ? EX.guess.length - 1 : 0; archRun(); archDraw(); }); });
+archDraw(); archRun();
+
+/* ---- architecture: layer stacks with a pass travelling through them ---- */
+const SLOW = 100, TNAME = "Qwen3.8-27B";
+let sTimer = null;
+function archSel() {
+  const c = sel(), models = [{ name: TNAME + " + RLVR adapter", key: TNAME, role: "Target", ms: BASE.ms_target, color: "var(--base)" },
+                              { name: c.draft, key: c.draft, role: "Draft", ms: c.ms_draft, color: "var(--s1)" }];
+  $("#stacks").innerHTML = models.map((m, k) => `<div style="--c:${m.color}"><div class="runhead" style="margin:0">${m.role}: ${m.name}</div>
+    <div class="stack" id="stk${k}" style="grid-template-columns:repeat(${D.arch[m.key] / 4},1fr);max-width:${D.arch[m.key] / D.arch[TNAME] * 100}%">${Array.from({ length: D.arch[m.key] }, (_, i) => `<i class="${i % 4 === 3 ? "f" : ""}"></i>`).join("")}</div>
+    <div class="stat"><div><div class="k">Layers</div><div class="v">${D.arch[m.key]}</div></div><div><div class="k">One pass</div><div class="v">${fmt(m.ms, 1)} ms</div></div><div><div class="k">Passes done</div><div class="v" id="pd${k}">0</div></div></div></div>`).join("");
+  $("#stackNote").textContent = `A token goes through every layer in turn. The animation runs ${SLOW} times slower than measured: a pass through the ${D.arch[TNAME]}-layer target takes about ${fmt(BASE.ms_target)} ms, and a pass through the ${D.arch[c.draft]}-layer ${c.draft} about ${fmt(c.ms_draft, 1)} ms (an estimate). The draft has ${pct(D.drafts[c.draft] / D.target_params)} of the target's parameters, but its pass costs ${pct(c.ms_draft / BASE.ms_target)} of a target pass: one prompt at a time, pass time follows the number of layers.`;
+  $("#archTbl").innerHTML = `<tr><th>Measure</th><th>Target: ${TNAME} + RLVR adapter</th><th>Draft: ${c.draft}</th></tr>` +
+    [["Role", "Decides every token that is written", "Guesses tokens for the target to check"],
+     ["Parameters", B(D.target_params), `${B(D.drafts[c.draft])} (${pct(D.drafts[c.draft] / D.target_params)} of the target)`],
+     ["Decoder layers", `${D.arch[TNAME]} (${D.arch[TNAME] * 3 / 4} linear attention + ${D.arch[TNAME] / 4} full attention)`, `${D.arch[c.draft]} (${D.arch[c.draft] * 3 / 4} linear attention + ${D.arch[c.draft] / 4} full attention)`],
+     ["Hidden size", fmt(D.hidden[TNAME]), fmt(D.hidden[c.draft])],
+     ["Tokenizer and vocabulary", "248,320 tokens", "the same 248,320 tokens (required)"],
+     ["Time for one single-token pass", `${fmt(BASE.ms_target)} ms`, `${fmt(c.ms_draft, 1)} ms (estimate)`],
+     ["Weights", "52 GB plus an 870 MB adapter, merged", `${D.disk[c.draft]} GB, as downloaded`],
+     ["Cache handling", "Copied before each round, restored after a rejection", "Copied before each round, restored after a rejection"]]
+      .map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join("");
+  clearInterval(sTimer);
+  const pos = [0, 0], done = [0, 0], cells = models.map((m, k) => [...document.querySelectorAll(`#stk${k} i`)]);
+  const paint = () => models.forEach((m, k) => { const i = Math.floor(pos[k]); cells[k].forEach((x, j) => x.classList.toggle("on", !STILL && j <= i && j > i - 3)); $(`#pd${k}`).textContent = done[k]; });
+  paint();
+  if (STILL) return;
+  sTimer = setInterval(() => { models.forEach((m, k) => { pos[k] += D.arch[m.key] * 50 / (m.ms * SLOW); if (pos[k] >= D.arch[m.key]) { pos[k] -= D.arch[m.key]; done[k]++; } }); paint(); }, 50);
+}
+build();
+</script>
+</body>
+</html>
