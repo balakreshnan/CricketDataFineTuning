@@ -81,6 +81,7 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | Both RLVR runs end to end (interactive) | `rhea/rlvr-two-runs-report.html` |
 | Rhea Qwen3.8 RLVR rerun, all 32 GPUs measured (interactive) | `rhea/qwen38-rlvr-allgpu-report.html` |
 | Dense vs mixture-of-experts RLVR comparison: architectures, benchmark, minute-by-minute GPU usage (interactive) | `rhea/rlvr-moe-vs-dense-report.html` |
+| Speculative decoding benchmark: drafts vs target alone, time split, per-question spread, GPU minutes (interactive) | `rhea/specdec-report.html` |
 | Rhea runbook | `rhea/README.md` |
 | Hecate cricket runbook | `cricket/README.md` |
 | FinNews experiment table | `pulled/experiments_summary.md` |
