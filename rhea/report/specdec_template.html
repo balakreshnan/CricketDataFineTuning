@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speculative Decoding Results</title>
+<style>__STYLE__
+:root{--s3:#1baf7a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--s3:#27b885}}
+:root[data-theme="dark"]{--s3:#27b885}
+.toks{display:grid;grid-template-columns:repeat(40,1fr);gap:2px;margin-top:8px}
+.toks i{display:block;aspect-ratio:1;border-radius:2px;background:var(--track)}
+.toks i.t{background:var(--base)}
+.toks i.a{background:var(--c)}
+.toks i.g{background:transparent;outline:1.5px dashed var(--c);outline-offset:-1.5px}
+.verdict{border-left:4px solid var(--s2);padding:10px 14px;background:var(--surface);border-radius:0 8px 8px 0;margin-top:14px;max-width:84ch}
+</style>
+</head>
+<body>
+<main>
+<h1>Speculative decoding on Rhea: does a small draft model make Qwen3.8-27B faster?</h1>
+<p class="sub" id="lead"></p>
+<div class="verdict" id="verdict"></div>
+<div class="grid tiles" id="tiles"></div>
+
+<h2>How speculative decoding works, and a replay of the race</h2>
+<p class="sub">A small draft model guesses the next few tokens. The large target model checks all the guesses in one pass, keeps the ones it agrees with, and supplies the next token itself. The answer is always the target's; only the speed changes. The replay below is a simulation built from this run's measurements for the chosen configuration: the measured share of accepted guesses and the estimated time of one draft pass and one checking round.</p>
+<div class="card">
+  <div class="controls">
+    <button class="primary" id="play">Play</button>
+    <label class="note">Draft <select id="selDraft"></select></label>
+    <label class="note">Guesses per round <select id="selGamma"></select></label>
+    <label class="note">Speed <select id="speed"><option value="0.25">0.25x</option><option value="0.5" selected>0.5x</option><option value="1">1x</option></select></label>
+    <span class="note" id="clock"></span>
+  </div>
+  <div class="race" id="race"></div>
+  <div class="legend"><span><i style="background:var(--base)"></i>Token written by the target</span><span><i style="background:var(--s1)"></i>Draft guess the target accepted</span><span><i style="background:transparent;outline:1.5px dashed var(--s1);outline-offset:-1.5px"></i>Draft guess waiting to be checked</span></div>
+  <p class="note" id="simNote"></p>
+</div>
+
+<h2>Speed: every draft made it slower</h2>
+<p class="sub" id="speedSub"></p>
+<div class="grid two">
+  <div class="card"><h3>Tokens per second</h3><p class="note">Higher is better. The dashed line is the target alone.</p><svg id="cSpeed"></svg></div>
+  <div class="card"><h3>Seconds per answer</h3><p class="note">Lower is better. The dashed line is the target alone.</p><svg id="cLat"></svg></div>
+</div>
+<div class="legend" id="lgGamma"></div>
+
+<h2>Acceptance: how often the draft guessed right</h2>
+<p class="sub">A guess counts as accepted when the target keeps it. After the first rejected guess in a round, the rest of that round's guesses are thrown away, so longer rounds waste more.</p>
+<div class="grid two">
+  <div class="card"><h3>Share of draft guesses accepted</h3><svg id="cAcc"></svg></div>
+  <div class="card"><h3>Tokens gained per target pass</h3><p class="note">1.0 means no gain. The most possible is guesses per round plus one.</p><svg id="cTpp"></svg></div>
+</div>
+
+<h2>Why it is slower: where the time per answer goes</h2>
+<p class="sub" id="whySub"></p>
+<div class="card"><h3>Estimated time per answer, split by model</h3><p class="note">Estimated by fitting answer time to the number of target rounds and draft passes, once per draft across its three round sizes. The target part includes checking several tokens at once and copying both caches for rollback.</p><svg id="cWhy"></svg>
+  <div class="legend"><span><i style="background:var(--base)"></i>Target passes</span><span><i style="background:var(--s2)"></i>Draft passes</span></div></div>
+<div class="card" style="margin-top:12px"><div class="scroll"><table id="passTbl"></table></div></div>
+
+<h2>Question by question</h2>
+<p class="sub">Each question was answered once by the target alone and once per configuration. This shows, for the configuration chosen in the replay above, how its speed compared with the target alone on each of the 200 questions.</p>
+<div class="grid two">
+  <div class="card"><h3 id="histH"></h3><p class="note" id="histNote"></p><svg id="cHist"></svg></div>
+  <div class="card"><h3>By question type, same configuration</h3><div class="scroll"><table id="qtTbl"></table></div></div>
+</div>
+
+<h2>GPU usage, minute by minute</h2>
+<p class="sub" id="gpuSub"></p>
+<div class="grid two">
+  <div class="card"><h3>GPU utilisation</h3><p class="note">Percent busy, mean per node per minute</p><svg id="gUtil"></svg></div>
+  <div class="card"><h3>GPU memory in use</h3><p class="note">Mean per GPU per node, with the 286.5 GB capacity line</p><svg id="gMem"></svg></div>
+</div>
+<div class="legend" id="lgNode"></div>
+<div class="card" style="margin-top:12px"><h3>Every GPU, every minute: percent busy</h3><p class="note">One row per GPU, one column per minute. Darker means busier. Hover for the reading.</p><svg id="gHeat"></svg></div>
+
+<h2>Two problems found on the way</h2>
+<div class="grid two">
+  <div class="card"><h3>The library refuses these models</h3><ul class="ins" id="f1"></ul></div>
+  <div class="card"><h3>A hidden slowdown in the attention kernel</h3><ul class="ins" id="f2"></ul></div>
+</div>
+
+<h2>Insights</h2>
+<div class="grid two">
+  <div class="card"><h3>What the results say</h3><ul class="ins" id="insA"></ul></div>
+  <div class="card"><h3>What could still make it pay off (none tried)</h3><ul class="ins" id="insB"></ul></div>
+</div>
+<p class="note" id="caveat"></p>
+
+<h2>Models, jobs and locations</h2>
+<div class="card"><h3>Which model was used for what</h3><div class="scroll"><table id="models"></table></div></div>
+<div class="card" style="margin-top:12px"><h3>Jobs</h3><div class="scroll"><table id="jobs"></table></div></div>
+<div class="card" style="margin-top:12px"><h3>Where the results are</h3><div class="scroll"><table id="where"></table></div></div>
+<details open><summary>All configurations</summary><div class="scroll"><table id="allTbl"></table></div></details>
+<details><summary>GPU readings per minute</summary><div class="scroll tall"><table id="minTbl"></table></div></details>
+</main>
+<div id="tip"></div>
+<script>
+const D = __DATA__;
+const $ = q => document.querySelector(q), NS = "http://www.w3.org/2000/svg";
+const el = (t, a = {}, txt) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; return e; };
+const fmt = (x, d = 0) => x.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (x, d = 0) => fmt(x * 100, d) + "%";
+const avgOf = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((p, q) => p + q, 0) / v.length : null; };
+const li = x => x.map(v => `<li>${v}</li>`).join("");
+const STILL = matchMedia("(prefers-reduced-motion: reduce)").matches, CAP = 286.5, W = 520;
+const tip = $("#tip");
+function showTip(ev, html) { tip.innerHTML = html; tip.style.display = "block"; const w = tip.offsetWidth, h = tip.offsetHeight; let x = ev.clientX + 14, y = ev.clientY + 14; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + h > innerHeight - 8) y = ev.clientY - h - 14; tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px"; }
+const hideTip = () => tip.style.display = "none";
+function hover(node, html) { node.addEventListener("mousemove", e => showTip(e, typeof html === "function" ? html() : html)); node.addEventListener("mouseleave", hideTip); }
+
+const C = D.configs, BASE = C.find(c => c.config === "baseline"), HF = C.find(c => c.config === "hf-generate");
+const SP = C.filter(c => c.draft), DRAFTS = [...new Set(SP.map(c => c.draft))], GAMMAS = [...new Set(SP.map(c => c.gamma))].sort((x, y) => x - y);
+const GCOL = ["var(--s1)", "var(--s2)", "var(--s3)"], gcol = g => GCOL[GAMMAS.indexOf(g) % 3];
+const get = (d, g) => SP.find(c => c.draft === d && c.gamma === g);
+const best = SP.slice().sort((x, y) => y.speedup - x.speedup)[0], worst = SP.slice().sort((x, y) => x.speedup - y.speedup)[0];
+const short = d => d.replace("Qwen3.5-", ""), B = n => fmt(n / 1e9, n < 2e9 ? 2 : 1) + "B";
+
+/* ---- lead, verdict, tiles ---- */
+$("#lead").textContent = `Benchmark run ${D.run} (Rhea job ${D.job}, ${D.date}): the cricket-tuned Qwen3.8-27B answered ${D.questions} held-out T20 cricket questions on its own and with each of ${DRAFTS.length} small draft models, at ${GAMMAS.join(", ")} guesses per round. One prompt at a time, on ${D.gpus} Vera Rubin GPUs.`;
+$("#verdict").innerHTML = `<b>No. Every draft made the target slower.</b> The target alone wrote ${fmt(BASE.tokens_per_s)} tokens a second. With a draft it wrote ${fmt(worst.tokens_per_s)} to ${fmt(best.tokens_per_s)}. The best configuration, ${best.draft} with ${best.gamma} guesses per round, ran at ${fmt(best.speedup, 2)} times the speed of the target alone. Accuracy was ${pct(BASE.accuracy)} in every configuration.`;
+const tile = (k, v, d) => `<div class="card tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
+$("#tiles").innerHTML =
+  tile("Target alone", `${fmt(BASE.tokens_per_s)} <small>tokens/s</small>`, `${fmt(BASE.sec_per_answer, 2)} s per answer of ${fmt(BASE.mean_tokens)} tokens`) +
+  tile("Best with a draft", `${fmt(best.tokens_per_s)} <small>tokens/s</small>`, `${fmt(best.speedup, 2)}x, ${best.draft}, ${best.gamma} guesses per round`) +
+  tile("Worst with a draft", `${fmt(worst.tokens_per_s)} <small>tokens/s</small>`, `${fmt(worst.speedup, 2)}x, ${worst.draft}, ${worst.gamma} guesses per round`) +
+  tile("Guesses accepted", `${pct(Math.min(...SP.map(c => c.acceptance)))} <small>to</small> ${pct(Math.max(...SP.map(c => c.acceptance)))}`, `gaining ${fmt(Math.min(...SP.map(c => c.tokens_per_target_pass)), 1)} to ${fmt(Math.max(...SP.map(c => c.tokens_per_target_pass)), 1)} tokens per target pass`) +
+  tile("Accuracy", pct(BASE.accuracy), `${C.reduce((s, c) => s + c.correct, 0).toLocaleString("en-US")} of ${C.reduce((s, c) => s + c.answers, 0).toLocaleString("en-US")} answers correct across all configurations`) +
+  tile("Run", `${fmt(D.elapsed_s / 60)} min`, `${D.gpus} GPUs on ${D.nodes.length} nodes, ${fmt(D.gpus * D.elapsed_s / 3600, 1)} GPU-hours, ${D.start} to ${D.end}`);
+
+/* ---- grouped horizontal bars: one group per draft, one bar per gamma, optional reference line ---- */
+function grouped(id, key, vf, ref, tipf) {
+  const svg = $(id), l = 92, r0 = 58, top = 8, bh = 15, gh = GAMMAS.length * (bh + 2) + 14, H = top + DRAFTS.length * gh + 26;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img");
+  const raw = Math.max(ref ? ref[0] : 0, ...SP.map(c => c[key])), stp = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 25, 50].find(s => raw / s <= 6), mx = Math.ceil(raw / stp - 1e-9) * stp, X = v => l + v / mx * (W - l - r0);
+  for (let v = 0; v <= mx + 1e-9; v += stp) { svg.appendChild(el("line", { x1: X(v), x2: X(v), y1: top, y2: H - 26, stroke: "var(--grid)" })); svg.appendChild(el("text", { x: X(v), y: H - 9, "text-anchor": "middle" }, vf(v, true))); }
+  DRAFTS.forEach((d, i) => {
+    const y = top + i * gh; svg.appendChild(el("text", { x: l - 10, y: y + gh / 2, "text-anchor": "end", class: "lab" }, short(d)));
+    GAMMAS.forEach((g, k) => { const c = get(d, g); if (!c) return; const v = c[key], yy = y + 4 + k * (bh + 2), w = Math.max(1.5, X(v) - l), q = Math.min(4, w);
+      const bar = el("path", { d: `M${l} ${yy}H${l + w - q}q${q} 0 ${q} 4v${bh - 8}q0 4 -${q} 4H${l}Z`, fill: gcol(g) }); svg.appendChild(bar);
+      svg.appendChild(el("text", { x: l + w + 5, y: yy + bh - 3 }, vf(v)));
+      hover(bar, tipf(c)); });
+  });
+  if (ref) { svg.appendChild(el("line", { x1: X(ref[0]), x2: X(ref[0]), y1: top - 4, y2: H - 26, stroke: "var(--text)", "stroke-dasharray": "4 3", "stroke-width": 1.5 })); svg.appendChild(el("text", { x: X(ref[0]) - 5, y: H - 30, "text-anchor": "end", class: "lab" }, ref[1])); }
+}
+const tipC = c => `<b>${c.draft}, ${c.gamma} guesses per round</b><br>${fmt(c.tokens_per_s, 1)} tokens/s (${fmt(c.speedup, 2)}x the target alone)<br>${fmt(c.sec_per_answer, 2)} s per answer<br>${pct(c.acceptance)} of guesses accepted<br>${fmt(c.tokens_per_target_pass, 2)} tokens per target pass`;
+grouped("#cSpeed", "tokens_per_s", (v, ax) => fmt(v, ax ? 0 : 1), [BASE.tokens_per_s, `alone ${fmt(BASE.tokens_per_s, 1)}`], tipC);
+grouped("#cLat", "sec_per_answer", (v, ax) => fmt(v, ax ? 0 : 2) + (ax ? "" : " s"), [BASE.sec_per_answer, `alone ${fmt(BASE.sec_per_answer, 2)} s`], tipC);
+grouped("#cAcc", "acceptance", v => pct(v), null, tipC);
+grouped("#cTpp", "tokens_per_target_pass", (v, ax) => fmt(v, ax ? 1 : 2), [1, "no gain"], tipC);
+$("#lgGamma").innerHTML = GAMMAS.map(g => `<span><i style="background:${gcol(g)}"></i>${g} guesses per round</span>`).join("");
+$("#speedSub").textContent = `The target alone wrote ${fmt(BASE.tokens_per_s, 1)} tokens a second through the benchmark's own decoding loop and ${fmt(HF.tokens_per_s, 1)} through the library's generate(), so the comparison baseline is fair. All ${SP.length} draft configurations were slower, and longer rounds were slower still.`;
+
+/* ---- why: stacked time per answer ---- */
+(() => {
+  const rows = [BASE, ...SP], svg = $("#cWhy"), WW = 1040, l = 190, r0 = 150, top = 6, bh = 16, rh = 24, H = top + rows.length * rh + 26;
+  svg.setAttribute("viewBox", `0 0 ${WW} ${H}`); svg.setAttribute("role", "img");
+  const tT = c => c.ms_target * c.target_calls / 1000, tD = c => c.ms_draft * c.draft_calls / 1000;
+  const mx = Math.ceil(Math.max(...rows.map(c => tT(c) + tD(c)))), X = v => l + v / mx * (WW - l - r0);
+  for (let v = 0; v <= mx; v++) { svg.appendChild(el("line", { x1: X(v), x2: X(v), y1: top, y2: H - 26, stroke: "var(--grid)" })); svg.appendChild(el("text", { x: X(v), y: H - 9, "text-anchor": "middle" }, v === 0 ? "0 s" : v)); }
+  rows.forEach((c, i) => { const y = top + i * rh, a = tT(c), b = tD(c);
+    svg.appendChild(el("text", { x: l - 10, y: y + bh - 3, "text-anchor": "end", class: "lab" }, c.draft ? `${short(c.draft)}, ${c.gamma} per round` : "Target alone"));
+    const r1 = el("rect", { x: l, y, width: Math.max(1, X(a) - l), height: bh, fill: "var(--base)", rx: 2 }); svg.appendChild(r1);
+    hover(r1, `<b>${c.config}: target</b><br>${fmt(c.target_calls)} passes x ${fmt(c.ms_target)} ms = ${fmt(a, 2)} s`);
+    if (b > 0) { const r2 = el("rect", { x: X(a) + 2, y, width: Math.max(1, X(a + b) - X(a) - 2), height: bh, fill: "var(--s2)", rx: 2 }); svg.appendChild(r2);
+      hover(r2, `<b>${c.config}: draft</b><br>${fmt(c.draft_calls)} passes x ${fmt(c.ms_draft, 1)} ms = ${fmt(b, 2)} s`); }
+    svg.appendChild(el("text", { x: X(a + b) + 8, y: y + bh - 3 }, `${fmt(a + b, 2)} s${c.draft ? ` (${pct(b / (a + b))} draft)` : ""}`)); });
+})();
+const dPass = avgOf(SP.map(c => c.ms_draft)), dShare = avgOf(SP.map(c => c.ms_draft * c.draft_calls / (c.ms_draft * c.draft_calls + c.ms_target * c.target_calls)));
+$("#whySub").textContent = `One pass through the target takes about ${fmt(BASE.ms_target)} ms when it writes one token at a time. A draft does cut the number of target passes, from ${fmt(BASE.target_calls)} per answer to between ${fmt(Math.min(...SP.map(c => c.target_calls)))} and ${fmt(Math.max(...SP.map(c => c.target_calls)))}. But each draft pass costs about ${fmt(Math.min(...SP.map(c => c.ms_draft)))} to ${fmt(Math.max(...SP.map(c => c.ms_draft)))} ms, a draft needs ${fmt(Math.min(...SP.map(c => c.draft_calls)))} to ${fmt(Math.max(...SP.map(c => c.draft_calls)))} passes per answer, and a checking round costs about ${fmt(avgOf(SP.map(c => c.ms_target)))} ms, about ${fmt(avgOf(SP.map(c => c.ms_target)) / BASE.ms_target, 1)} times a plain pass, because it processes several tokens and copies both models' caches so that a rejected round can be undone. Draft passes take ${pct(dShare)} of the time on average.`;
+$("#passTbl").innerHTML = `<tr><th>Configuration</th><th>Layers in draft</th><th>Target passes per answer</th><th>Draft passes per answer</th><th>Estimated ms per target round</th><th>Estimated ms per draft pass</th><th>Draft pass as share of a plain target pass</th></tr>` +
+  [BASE, ...SP].map(c => `<tr><td>${c.draft ? `${c.draft}, ${c.gamma} per round` : "Target alone (64 layers)"}</td><td>${c.draft ? D.arch[c.draft] : ""}</td><td>${fmt(c.target_calls)}</td><td>${c.draft ? fmt(c.draft_calls) : ""}</td><td>${fmt(c.ms_target)}</td><td>${c.draft ? fmt(c.ms_draft, 1) : ""}</td><td>${c.draft ? pct(c.ms_draft / BASE.ms_target) : ""}</td></tr>`).join("");
+
+/* ---- selectors, histogram, question types ---- */
+$("#selDraft").innerHTML = DRAFTS.map(d => `<option${d === best.draft ? " selected" : ""}>${d}</option>`).join("");
+$("#selGamma").innerHTML = GAMMAS.map(g => `<option${g === best.gamma ? " selected" : ""}>${g}</option>`).join("");
+const sel = () => get($("#selDraft").value, +$("#selGamma").value);
+const QT = { run_rate: "Run rate", chase_rate: "Chase rate", milestone: "Milestone" };
+function drawSel() {
+  const c = sel(), svg = $("#cHist"), H = 220, l = 40, r0 = 12, top = 10, bt = 26, lo = 0.2, hi = 1.6, stp = 0.1, nb = Math.round((hi - lo) / stp);
+  const cnt = Array(nb).fill(0); c.ratio.forEach(v => cnt[Math.max(0, Math.min(nb - 1, Math.floor((v - lo) / stp)))]++);
+  svg.innerHTML = ""; svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img");
+  const my = Math.ceil(Math.max(...cnt) / 10) * 10, X = v => l + (v - lo) / (hi - lo) * (W - l - r0), Y = v => top + (1 - v / my) * (H - top - bt);
+  for (let v = 0; v <= my; v += my / 5 >= 10 ? Math.ceil(my / 50) * 10 : 10) { svg.appendChild(el("line", { x1: l, x2: W - r0, y1: Y(v), y2: Y(v), stroke: "var(--grid)" })); svg.appendChild(el("text", { x: l - 6, y: Y(v) + 4, "text-anchor": "end" }, v)); }
+  cnt.forEach((n, i) => { if (!n) return; const x0 = X(lo + i * stp), x1 = X(lo + (i + 1) * stp), y = Y(n);
+    const bar = el("rect", { x: x0 + 1, y, width: x1 - x0 - 2, height: Y(0) - y, fill: lo + i * stp >= 1 ? "var(--s3)" : "var(--s1)", rx: 2 }); svg.appendChild(bar);
+    hover(bar, `<b>${fmt(lo + i * stp, 1)}x to ${fmt(lo + (i + 1) * stp, 1)}x</b><br>${n} of ${c.ratio.length} questions`); });
+  for (let v = lo; v <= hi + 1e-9; v += 0.2) svg.appendChild(el("text", { x: X(v), y: H - 8, "text-anchor": "middle" }, fmt(v, 1) + "x"));
+  svg.appendChild(el("line", { x1: X(1), x2: X(1), y1: top, y2: Y(0), stroke: "var(--text)", "stroke-dasharray": "4 3", "stroke-width": 1.5 }));
+  svg.appendChild(el("text", { x: X(1) + 5, y: top + 10, class: "lab" }, "same speed"));
+  const faster = c.ratio.filter(v => v > 1).length, srt = c.ratio.slice().sort((x, y) => x - y);
+  $("#histH").textContent = `${c.draft}, ${c.gamma} guesses per round: speed against the target alone`;
+  $("#histNote").textContent = `${faster} of ${c.ratio.length} questions were faster with the draft. Median ${fmt(srt[Math.floor(srt.length / 2)], 2)}x, range ${fmt(srt[0], 2)}x to ${fmt(srt[srt.length - 1], 2)}x.`;
+  $("#qtTbl").innerHTML = `<tr><th>Question type</th><th>Tokens/s</th><th>Against target alone</th><th>Guesses accepted</th><th>Tokens per answer</th><th>Accuracy</th></tr>` +
+    Object.keys(QT).filter(q => c.qtype[q]).map(q => `<tr><td>${QT[q]}</td><td>${fmt(c.qtype[q].tokens_per_s, 1)}</td><td>${fmt(c.qtype[q].speedup, 2)}x</td><td>${pct(c.qtype[q].acceptance)}</td><td>${fmt(c.qtype[q].mean_tokens)}</td><td>${pct(c.qtype[q].accuracy)}</td></tr>`).join("") +
+    `<tr><td>All</td><td>${fmt(c.tokens_per_s, 1)}</td><td>${fmt(c.speedup, 2)}x</td><td>${pct(c.acceptance)}</td><td>${fmt(c.mean_tokens)}</td><td>${pct(c.accuracy)}</td></tr>`;
+}
+
+/* ---- replay: simulated race ---- */
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const NTOK = Math.round(BASE.mean_tokens);
+let sim, cur = 0, playing = false, last = 0;
+function build() {
+  const c = sel(), g = c.gamma, target = c.acceptance * g;  // expected accepted guesses per round
+  let lo = 0, hi = 0.999; for (let i = 0; i < 40; i++) { const p = (lo + hi) / 2; let e = 0, q = 1; for (let k = 0; k < g; k++) { q *= p; e += q; } if (e < target) lo = p; else hi = p; }
+  const p = (lo + hi) / 2, rnd = rng(7), ev = []; let t = 0, n = 0, tp = 0, dp = 0;
+  while (n < NTOK) { const k = Math.min(g, NTOK - n); let acc = 0; while (acc < k && rnd() < p) acc++;
+    const t0 = t, tDraft = t + k * c.ms_draft; t = tDraft + c.ms_target; tp++; dp += k;
+    const add = Math.min(NTOK - n, acc + 1);
+    ev.push({ t0, tDraft, t1: t, n0: n, k, acc: Math.min(acc, add), add, tp, dp }); n += add; }
+  sim = { c, p, ev, tEnd: t, baseEnd: NTOK * BASE.ms_target, T: Math.max(t, NTOK * BASE.ms_target) };
+  $("#race").innerHTML = [["Target alone", "var(--base)"], [`Target + ${c.draft}`, "var(--s1)"]].map(x => `<div class="lane" style="--c:${x[1]}"><div class="nm"><span class="sw" style="background:${x[1]}"></span>${x[0]}</div><div class="st"></div><div class="toks">${"<i></i>".repeat(NTOK)}</div><div class="ro"></div></div>`).join("");
+  $("#simNote").textContent = `Simulation of one ${NTOK}-token answer. Per-guess acceptance is set to ${pct(p)} so that the share of accepted guesses matches the measured ${pct(c.acceptance)}; one draft pass is taken as ${fmt(c.ms_draft, 1)} ms and one checking round as ${fmt(c.ms_target)} ms (estimates from this run), one plain target pass as ${fmt(BASE.ms_target)} ms. Measured result for this configuration: ${fmt(c.tokens_per_s, 1)} tokens/s against ${fmt(BASE.tokens_per_s, 1)} alone.`;
+  cur = STILL ? sim.T : 0; playing = false; $("#play").textContent = "Play"; draw(); drawSel();
+}
+function draw() {
+  const [L0, L1] = [...document.querySelectorAll(".lane")], ms = cur, ro = x => x.map(v => `<div><div class="k">${v[0]}</div><div class="v">${v[1]}</div></div>`).join("");
+  $("#clock").textContent = `${fmt(ms / 1000, 2)} s of ${fmt(sim.T / 1000, 2)} s`;
+  const nb = Math.min(NTOK, Math.floor(ms / BASE.ms_target));
+  [...L0.querySelectorAll(".toks i")].forEach((x, i) => x.className = i < nb ? "t" : "");
+  L0.querySelector(".st").innerHTML = nb >= NTOK ? `<b>Finished</b> in ${fmt(sim.baseEnd / 1000, 2)} s.` : `<b>Writing token ${nb + 1}.</b> One target pass per token.`;
+  L0.querySelector(".ro").innerHTML = ro([["Tokens", nb], ["Target passes", nb], ["Tokens/s", ms > 0 ? fmt(nb / Math.min(ms, sim.baseEnd) * 1000, 1) : "0"]]);
+  const cells = [...L1.querySelectorAll(".toks i")]; cells.forEach(x => x.className = "");
+  let n = 0, tp = 0, dp = 0, st = `<b>Finished</b> in ${fmt(sim.tEnd / 1000, 2)} s.`;
+  for (const e of sim.ev) {
+    if (ms >= e.t1) { for (let i = 0; i < e.add; i++) cells[e.n0 + i].className = i < e.acc ? "a" : "t"; n = e.n0 + e.add; tp = e.tp; dp = e.dp; continue; }
+    if (ms >= e.t0) { const made = ms >= e.tDraft ? e.k : Math.min(e.k, Math.floor((ms - e.t0) / sim.c.ms_draft) + 1);
+      for (let i = 0; i < made && e.n0 + i < NTOK; i++) cells[e.n0 + i].className = "g";
+      dp = e.dp - e.k + made; tp = e.tp - 1;
+      st = ms >= e.tDraft ? `<b>Target is checking ${e.k} guesses</b> in one pass.` : `<b>Draft is guessing</b> token ${made} of ${e.k} for this round.`; }
+    break;
+  }
+  L1.querySelector(".st").innerHTML = st;
+  L1.querySelector(".ro").innerHTML = ro([["Tokens", n], ["Target passes", tp], ["Draft passes", dp]]);
+}
+function tick(t) { if (!playing) return; const dt = Math.min(100, t - last); last = t; cur += dt * +$("#speed").value; if (cur >= sim.T) { cur = sim.T; playing = false; $("#play").textContent = "Replay"; draw(); return; } draw(); requestAnimationFrame(tick); }
+$("#play").addEventListener("click", () => { if (playing) { playing = false; $("#play").textContent = "Resume"; return; } if (cur >= sim.T) cur = 0; playing = true; $("#play").textContent = "Pause"; last = performance.now(); requestAnimationFrame(tick); });
+$("#selDraft").addEventListener("change", build); $("#selGamma").addEventListener("change", build);
+
+/* ---- GPU charts ---- */
+const G = D.gpu, NB = G.util[0].length, NCOL = ["var(--s1)", "var(--s2)"];
+function lines(id, key, y1, yt, yf, cap) {
+  const svg = $(id), H = 220, M = { l: 46, r: 14, t: 10, b: 24 }, iw = W - M.l - M.r, ih = H - M.t - M.b; svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img");
+  const X = v => M.l + v / NB * iw, Y = v => M.t + (1 - v / y1) * ih;
+  yt.forEach(v => { svg.appendChild(el("line", { x1: M.l, x2: W - M.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)" })); svg.appendChild(el("text", { x: M.l - 6, y: Y(v) + 4, "text-anchor": "end" }, yf(v))); });
+  for (let m = 0; m <= NB; m += 10) svg.appendChild(el("text", { x: X(m), y: H - 6, "text-anchor": "middle" }, m === 0 ? "0 min" : m));
+  if (cap) { svg.appendChild(el("line", { x1: M.l, x2: W - M.r, y1: Y(cap), y2: Y(cap), stroke: "var(--text2)", "stroke-dasharray": "4 4" })); svg.appendChild(el("text", { x: W - M.r, y: Y(cap) - 5, "text-anchor": "end" }, cap + " GB capacity")); }
+  const ser = D.nodes.map((n, i) => Array.from({ length: NB }, (_, m) => avgOf(G[key].slice(i * 4, i * 4 + 4).map(r => r[m]))));
+  ser.forEach((s, i) => { let d = "", pen = false; s.forEach((v, m) => { if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + X(m + 0.5).toFixed(1) + " " + Y(v).toFixed(1); pen = true; }); svg.appendChild(el("path", { d, fill: "none", stroke: NCOL[i % 2], "stroke-width": 2, "stroke-linejoin": "round" })); });
+  const ov = el("rect", { x: M.l, y: M.t, width: iw, height: ih, fill: "transparent" }); svg.appendChild(ov);
+  ov.addEventListener("mousemove", e => { const bb = ov.getBoundingClientRect(), m = Math.max(0, Math.min(NB - 1, Math.floor((e.clientX - bb.left) / bb.width * NB))); showTip(e, `<b>Minute ${m + 1}</b>` + ser.map((s, i) => `<br>${D.nodes[i]}: ${s[m] == null ? "no reading" : yf(Math.round(s[m]))}`).join("")); });
+  ov.addEventListener("mouseleave", hideTip);
+}
+lines("#gUtil", "util", 100, [0, 25, 50, 75, 100], v => v + "%");
+lines("#gMem", "mem", 300, [0, 100, 200, 300], v => v + " GB", CAP);
+$("#lgNode").innerHTML = D.nodes.map((n, i) => `<span><i style="background:${NCOL[i % 2]}"></i>${n} (GPUs ${i * 4} to ${i * 4 + 3})</span>`).join("");
+(() => {
+  const svg = $("#gHeat"), WW = 1040, l = 110, rr = 12, t = 4, rh = 16, bt = 22, iw = WW - l - rr, cw = iw / NB, rowY = g => t + g * rh + Math.floor(g / 4) * 6, hh = rowY(D.gpus - 1) + rh - t, H = t + hh + bt;
+  svg.setAttribute("viewBox", `0 0 ${WW} ${H}`); svg.setAttribute("role", "img");
+  for (let g = 0; g < D.gpus; g++) svg.appendChild(el("text", { x: l - 8, y: rowY(g) + rh - 4, "text-anchor": "end" }, `${D.nodes[Math.floor(g / 4)]} GPU ${g % 4}`));
+  G.util.forEach((row, g) => row.forEach((v, m) => { if (v != null) svg.appendChild(el("rect", { x: l + m * cw, y: rowY(g), width: cw - 1, height: rh - 2, fill: "var(--s1)", opacity: (0.06 + 0.94 * v / 100).toFixed(3) })); }));
+  for (let m = 0; m <= NB; m += 5) svg.appendChild(el("text", { x: l + m * cw, y: H - 6, "text-anchor": "middle" }, m === 0 ? "0 min" : m));
+  const ov = el("rect", { x: l, y: t, width: iw, height: hh, fill: "transparent" }); svg.appendChild(ov);
+  ov.addEventListener("mousemove", e => { const bb = ov.getBoundingClientRect(), m = Math.max(0, Math.min(NB - 1, Math.floor((e.clientX - bb.left) / bb.width * NB))), yy = (e.clientY - bb.top) / bb.height * hh; let g = 0; for (let k = 0; k < D.gpus; k++) if (yy >= rowY(k) - t) g = k;
+    showTip(e, `<b>${D.nodes[Math.floor(g / 4)]}, GPU ${g % 4}</b><br>Minute ${m + 1}: ${G.util[g][m] == null ? "no reading" : `${fmt(G.util[g][m])}% busy, ${fmt(G.mem[g][m])} GB, ${fmt(G.pow[g][m])} W`}`); });
+  ov.addEventListener("mouseleave", hideTip);
+})();
+$("#gpuSub").textContent = `Each of the ${D.gpus} GPUs held the target and all ${DRAFTS.length} drafts and worked through its ${D.questions / D.gpus} questions, cycling through all ${C.length} configurations per question. nvidia-smi logged every GPU every 15 seconds (${fmt(G.readings)} readings). Utilisation averaged ${fmt(G.util_avg)}%, memory averaged ${fmt(G.mem_avg)} GB and peaked at ${fmt(G.mem_peak)} GB of ${CAP} GB, and power averaged ${fmt(G.pow_avg)} W. A minute of readings mixes several configurations, so these charts describe the run, not any one configuration.`;
+$("#minTbl").innerHTML = `<tr><th>Minute</th>${D.nodes.map(n => `<th>${n} busy %</th><th>lowest to highest GPU</th><th>memory GB</th><th>power W</th>`).join("")}</tr>` +
+  Array.from({ length: NB }, (_, m) => `<tr><td>${m + 1}</td>${D.nodes.map((n, i) => { const u = G.util.slice(i * 4, i * 4 + 4).map(r => r[m]).filter(v => v != null); return u.length ? `<td>${fmt(avgOf(u))}</td><td>${fmt(Math.min(...u))} to ${fmt(Math.max(...u))}</td><td>${fmt(avgOf(G.mem.slice(i * 4, i * 4 + 4).map(r => r[m])))}</td><td>${fmt(avgOf(G.pow.slice(i * 4, i * 4 + 4).map(r => r[m])))}</td>` : "<td></td>".repeat(4); }).join("")}</tr>`).join("");
+
+/* ---- findings and insights ---- */
+$("#f1").innerHTML = li([
+  `<b>What happened.</b> The first test job failed: transformers 5.22.2 raises "assisted generation is not supported with stateful models" for the Qwen3.5 model family, which includes both targets and all four drafts.`,
+  `<b>Why.</b> Three of every four layers use linear attention, which keeps a running state. When a guess is rejected, that state cannot be rewound the way an ordinary attention cache can.`,
+  `<b>What was done.</b> The benchmark has its own decoding loop. It copies each model's cache before a round and restores the copy when a guess is rejected. With greedy decoding its answers matched the target-only answers in a test on 8 questions (8 of 8 with the 0.8B draft, 7 of 8 with the others, all correct).`]);
+$("#f2").innerHTML = li([
+  `<b>What happened.</b> In the first tests the target alone ran at about 8 tokens a second, while an isolated test of the same loop ran at about 40.`,
+  `<b>Why.</b> The cuDNN attention kernel costs about 5 ms per call the first time it sees a sequence length. Decoding changes the length on every token, so every fresh prompt paid it in all 16 full-attention layers. Four other explanations were tested and ruled out first.`,
+  `<b>What was done.</b> The benchmark switches that kernel off. In this run the target alone reached ${fmt(BASE.tokens_per_s)} tokens a second on fresh prompts.`,
+  `<b>Open question.</b> The RLVR training and evaluation scripts do not switch it off. Whether they pay the same cost has not been measured.`]);
+const hyp = c => BASE.sec_per_answer / ((c.target_calls * BASE.ms_target + c.draft_calls * c.ms_draft) / 1000), hbest = SP.slice().sort((x, y) => hyp(y) - hyp(x))[0];
+const g2 = GAMMAS[0], g8 = GAMMAS[GAMMAS.length - 1], big = DRAFTS[DRAFTS.length - 1], small = DRAFTS[0];
+$("#insA").innerHTML = li([
+  `<b>No configuration beat the target alone.</b> Speeds ranged from ${fmt(worst.speedup, 2)}x to ${fmt(best.speedup, 2)}x. Fewer guesses per round was always faster: ${GAMMAS.map(g => `${fmt(avgOf(DRAFTS.map(d => get(d, g).speedup)), 2)}x at ${g}`).join(", ")} on average.`,
+  `<b>Bigger drafts guess better but cost more.</b> At ${g2} guesses per round, acceptance rose from ${pct(get(small, g2).acceptance)} with ${short(small)} to ${pct(get(big, g2).acceptance)} with ${short(big)}, yet speed stayed between ${fmt(Math.min(...DRAFTS.map(d => get(d, g2).speedup)), 2)}x and ${fmt(Math.max(...DRAFTS.map(d => get(d, g2).speedup)), 2)}x.`,
+  `<b>A draft pass is not cheap here.</b> It costs about ${pct(Math.min(...SP.map(c => c.ms_draft)) / BASE.ms_target)} to ${pct(Math.max(...SP.map(c => c.ms_draft)) / BASE.ms_target)} of a plain target pass, although the drafts have 3% to 36% of the target's parameters. One prompt at a time, time per pass follows the number of layers (24 or 32 against 64) more than the number of parameters. This reading is an interpretation of the fitted pass times, not a separate measurement.`,
+  `<b>The checking round is expensive in this implementation.</b> It costs about ${fmt(avgOf(SP.map(c => c.ms_target)))} ms against ${fmt(BASE.ms_target)} ms for a plain pass. Rollback for these models needs cache copies, and multi-token passes use a plain PyTorch kernel. This overhead belongs to the decoding loop written for this benchmark, not to speculative decoding as such.`,
+  `<b>Long rounds waste guesses.</b> At ${g8} guesses per round only ${pct(Math.min(...DRAFTS.map(d => get(d, g8).acceptance)))} to ${pct(Math.max(...DRAFTS.map(d => get(d, g8).acceptance)))} of guesses were kept.`,
+  `<b>Answers were unchanged in quality.</b> Accuracy was ${pct(BASE.accuracy)} and answers averaged ${fmt(Math.min(...C.map(c => c.mean_tokens)))} to ${fmt(Math.max(...C.map(c => c.mean_tokens)))} tokens in every configuration, as speculative sampling should give.`]);
+$("#insB").innerHTML = li([
+  `<b>A cheaper checking round.</b> If a checking round cost the same as a plain pass, the fitted numbers put the best configuration (${hbest.draft}, ${hbest.gamma} guesses per round) at about ${fmt(hyp(hbest), 2)}x. That is an estimate from the fit, not a measurement, and it is still a small gain.`,
+  `<b>A draft trained to imitate the tuned target.</b> The drafts are untuned and older than the target, which writes very short answers. Fine-tuning a draft on the same cricket data should raise acceptance.`,
+  `<b>Compiled passes.</b> If per-layer overhead dominates, compiling the draft's and target's forward passes would cut it. It would also speed up the target alone, so the net effect is unknown.`,
+  `<b>A shallower draft.</b> Pass time follows depth; a draft with far fewer layers would be cheaper per guess. None with this tokenizer exists on Hugging Face today.`,
+  `<b>A target with long answers.</b> The untuned target writes about six times more tokens per answer. Speculation may behave differently there.`,
+  `<b>Batched serving.</b> This benchmark measures one prompt at a time. A serving engine that batches requests has a different cost balance.`]);
+$("#caveat").textContent = `Limits: one answer per question per configuration, sampled, so per-question speeds are noisy. The per-pass times are estimates from a two-term fit, and the checking pass includes cache copying. The replay is a simulation. Only the cricket-tuned Qwen3.8-27B target was benchmarked.`;
+
+/* ---- tables ---- */
+$("#models").innerHTML = `<tr><th>Model</th><th class="l">Role</th><th>Parameters</th><th>Layers</th></tr>` +
+  [["Qwen/Qwen3.8-27B + RLVR adapter cricket-rlvr-1114", "Target: the model whose answers are wanted, only faster. The adapter makes it the cricket-tuned model.", B(D.target_params), D.arch["Qwen3.8-27B"]],
+   ...DRAFTS.map(d => [`Qwen/${d}`, "Draft: guesses the next tokens for the target to check. Used as downloaded, not fine-tuned.", B(D.drafts[d]), D.arch[d]]),
+   ["Dataset Balab2021/CricketData-T20-Reasoning-Qwen3.8-Full", `Source of the ${D.questions} held-out questions with exact answers.`, "", ""]]
+    .map(r => `<tr><td>${r[0]}</td><td class="l">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join("");
+$("#jobs").innerHTML = `<tr><th class="l">Job</th><th class="l">What it did</th><th>Nodes</th><th class="l">Outcome</th></tr>` +
+  [[120135, "Downloaded the four drafts to Lustre and checked their vocabulary against the target", 1, "Completed"],
+   [120136, "First smoke test, through the library's assisted generation", 1, "Failed: not supported for these models"],
+   ["120182, 120183", "Smoke tests of the hand-written loop, sampling and greedy, 8 questions", 1, "Completed; correct but slow"],
+   [120269, "Upload of smoke results to the private Hugging Face repo", 1, "Completed"],
+   ["120328 to 120720", "Nine short diagnostic jobs to find the slowdown", 1, "Cause found: cuDNN attention kernel"],
+   [D.job, `Full benchmark: ${D.questions} questions, ${C.length} configurations, W&B logging and upload`, D.nodes.length, `Completed in ${fmt(D.elapsed_s / 60)} min`]]
+    .map(j => `<tr><td class="l">${j[0]}</td><td class="l">${j[1]}</td><td>${j[2]}</td><td class="l">${j[3]}</td></tr>`).join("");
+$("#where").innerHTML = `<tr><th>Item</th><th class="l">Location</th></tr>` +
+  [["Records, summary, GPU logs (Lustre)", `/lustre/fsw/general_sa/bbalakreshna/cricket-rhea/specdec/${D.run}/`], ["Draft weights (Lustre)", "/lustre/fsw/general_sa/bbalakreshna/models/Qwen3.5-*"],
+   ["W&B project / run", D.wandb], ["Hugging Face (private dataset repo)", `Balab2021/Cricket-SpecDec-Rhea, folder ${D.run}`], ["Code", "rhea/specdec/ (cluster: ~/clustercodes/specdec)"]]
+    .map(x => `<tr><td>${x[0]}</td><td class="l">${x[1]}</td></tr>`).join("");
+$("#allTbl").innerHTML = `<tr><th>Configuration</th><th>Guesses per round</th><th>Tokens/s</th><th>Against target alone</th><th>Seconds per answer</th><th>Guesses accepted</th><th>Tokens per target pass</th><th>Tokens per answer</th><th>Accuracy</th></tr>` +
+  C.map(c => `<tr><td>${c.draft ? c.draft : c.config === "baseline" ? "Target alone (benchmark loop)" : "Target alone (library generate)"}</td><td>${c.gamma || ""}</td><td>${fmt(c.tokens_per_s, 1)}</td><td>${fmt(c.speedup, 2)}x</td><td>${fmt(c.sec_per_answer, 2)}</td><td>${c.acceptance == null ? "" : pct(c.acceptance)}</td><td>${fmt(c.tokens_per_target_pass, 2)}</td><td>${fmt(c.mean_tokens)}</td><td>${pct(c.accuracy)}</td></tr>`).join("");
+build();
+</script>
+</body>
+</html>

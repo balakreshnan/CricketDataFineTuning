@@ -1,0 +1,101 @@
+<!--CSS-->
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+.steps>div{border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--surface);transition:border-color .25s,box-shadow .25s}
+.steps>div.on{border-color:var(--s1);box-shadow:0 0 0 2px var(--s1) inset}
+.steps b{display:block;font-size:13px}
+.steps span{font-size:12.5px;color:var(--text2)}
+.steps .who{font-size:11.5px;color:var(--muted);margin-top:4px}
+.exrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:12px;min-height:34px}
+.exrow .lbl{font-size:12.5px;color:var(--text2);margin-right:4px}
+.tk{font:12px/1 ui-monospace,Menlo,Consolas,monospace;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);transition:all .25s}
+.tk.p{background:var(--track)}
+.tk.g{border-style:dashed;border-color:var(--s1)}
+.tk.a{background:var(--s1);border-color:var(--s1);color:#fff}
+.tk.r{border-color:var(--s2);color:var(--muted);text-decoration:line-through}
+.tk.t{background:var(--base);border-color:var(--base);color:#fff}
+.tk.x{opacity:.3;text-decoration:line-through}
+.exnote{font-size:13px;color:var(--text2);min-height:38px;margin-top:8px}
+.stack{display:grid;gap:2px;margin:8px 0;grid-auto-flow:column;grid-template-rows:repeat(4,auto)}
+.stack i{display:block;height:10px;border-radius:2px;background:var(--track);transition:background .08s}
+.stack i.f{outline:1.5px solid var(--muted);outline-offset:-1.5px}
+.stack i.on{background:var(--c)}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+.stat div{border:1px solid var(--border);border-radius:6px;padding:4px 8px}
+.stat .k{font-size:11.5px;color:var(--text2)}
+.stat .v{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+<!--HTML-->
+<h2>Architecture: how the pieces fit together</h2>
+<p class="sub">Two models sit on the same GPU and share one tokenizer. The draft writes guesses, the target checks them, and saved copies of each model's cache make it possible to undo a rejected round. The animation steps through one example round with 4 guesses, of which the third is rejected. Click a step to stop on it.</p>
+<div class="card">
+  <div class="controls"><button id="archPlay">Pause</button><span class="note" id="archStep"></span></div>
+  <div class="steps" id="steps"></div>
+  <div class="exrow" id="exrow"></div>
+  <div class="exnote" id="exnote"></div>
+  <div class="legend"><span><i style="background:var(--track)"></i>Prompt</span><span><i style="background:transparent;outline:1.5px dashed var(--s1);outline-offset:-1.5px"></i>Draft guess</span><span><i style="background:var(--s1)"></i>Guess accepted</span><span><i style="background:transparent;outline:1.5px solid var(--s2);outline-offset:-1.5px"></i>Guess rejected (struck through)</span><span><i style="background:var(--base)"></i>Token written by the target</span></div>
+</div>
+<div class="card" style="margin-top:12px">
+  <h3>One pass through each model, layer by layer</h3>
+  <p class="note" id="stackNote"></p>
+  <div class="grid two" id="stacks" style="align-items:start;margin-top:8px"></div>
+  <div class="legend"><span><i style="background:var(--track)"></i>Linear-attention layer (keeps a running state)</span><span><i style="background:var(--track);outline:1.5px solid var(--muted);outline-offset:-1.5px"></i>Full-attention layer (every fourth)</span><span><i style="background:var(--s1)"></i>Where the token is now</span></div>
+  <p class="note">Each column is one group of four layers, read top to bottom, then left to right. The draft shown is the one chosen in the replay further down.</p>
+</div>
+<div class="card" style="margin-top:12px"><h3>The two models side by side</h3><div class="scroll"><table id="archTbl"></table></div></div>
+
+<!--JS-->
+/* ---- architecture: one round, step by step ---- */
+const STEPS = [
+  ["1. Read the prompt", "Both models read the question once and build their caches.", "draft + target"],
+  ["2. Save state", "A copy of each model's cache is kept, so the round can be undone.", "both caches"],
+  ["3. Draft guesses", "The draft writes the next tokens, one pass per token.", "draft, 4 passes"],
+  ["4. Target checks", "The target reads all the guesses in one pass and scores each one.", "target, 1 pass"],
+  ["5. Accept or reject", "Guesses are kept until the first one the target disagrees with. The target supplies that token itself.", "speculative sampling"],
+  ["6. Undo and continue", "The saved copies are restored. The kept tokens are fed again with the next round.", "back to step 2"]];
+const EX = { prompt: ["Run", "rate", "="], guess: ["142", "/", "17", ".3"], fix: "18", bad: 2 };
+$("#steps").innerHTML = STEPS.map(x => `<div><b>${x[0]}</b><span>${x[1]}</span><div class="who">${x[2]}</div></div>`).join("");
+let aStep = STILL ? 4 : 0, aSub = 0, aRun = !STILL, aTimer = null;
+function archDraw() {
+  [...document.querySelectorAll("#steps > div")].forEach((d, i) => d.classList.toggle("on", i === aStep));
+  const tk = (t, c) => `<span class="tk ${c}">${t}</span>`;
+  let row = `<span class="lbl">Tokens</span>` + EX.prompt.map(t => tk(t, "p")).join(""), note = "";
+  if (aStep === 0) note = "The prompt is in both caches. Nothing has been generated yet.";
+  if (aStep === 1) note = "Snapshot taken. These models need one because the running state of their linear-attention layers cannot be rewound.";
+  if (aStep === 2) { const n = Math.min(EX.guess.length, aSub + 1); row += EX.guess.slice(0, n).map(t => tk(t, "g")).join(""); note = `The draft has written ${n} of ${EX.guess.length} guesses. Each guess is one pass through the draft.`; }
+  if (aStep === 3) { row += EX.guess.map(t => tk(t, "g")).join(""); note = "One target pass covers all four guesses and also predicts the token after them."; }
+  if (aStep === 4) { row += EX.guess.map((t, i) => tk(t, i < EX.bad ? "a" : i === EX.bad ? "r" : "x")).join("") + tk(EX.fix, "t"); note = `The first two guesses are accepted. The third is rejected, so the target writes "${EX.fix}" instead and the fourth guess is thrown away. This round produced 3 tokens for 1 target pass and 4 draft passes.`; }
+  if (aStep === 5) { row += EX.guess.slice(0, EX.bad).map(t => tk(t, "a")).join("") + tk(EX.fix, "t"); note = "Both caches go back to the snapshot. The three new tokens are read again at the start of the next round, in the same target pass that checks the next guesses."; }
+  $("#exrow").innerHTML = row; $("#exnote").textContent = note; $("#archStep").textContent = `Step ${aStep + 1} of ${STEPS.length}`;
+}
+function archTick() { if (aStep === 2 && aSub < EX.guess.length - 1) aSub++; else { aStep = (aStep + 1) % STEPS.length; aSub = 0; } archDraw(); }
+function archRun() { clearInterval(aTimer); if (aRun) aTimer = setInterval(archTick, 1300); $("#archPlay").textContent = aRun ? "Pause" : "Play"; }
+$("#archPlay").addEventListener("click", () => { aRun = !aRun; archRun(); });
+[...document.querySelectorAll("#steps > div")].forEach((d, i) => { d.style.cursor = "pointer"; d.addEventListener("click", () => { aRun = false; aStep = i; aSub = i === 2 ? EX.guess.length - 1 : 0; archRun(); archDraw(); }); });
+archDraw(); archRun();
+
+/* ---- architecture: layer stacks with a pass travelling through them ---- */
+const SLOW = 100, TNAME = "Qwen3.8-27B";
+let sTimer = null;
+function archSel() {
+  const c = sel(), models = [{ name: TNAME + " + RLVR adapter", key: TNAME, role: "Target", ms: BASE.ms_target, color: "var(--base)" },
+                              { name: c.draft, key: c.draft, role: "Draft", ms: c.ms_draft, color: "var(--s1)" }];
+  $("#stacks").innerHTML = models.map((m, k) => `<div style="--c:${m.color}"><div class="runhead" style="margin:0">${m.role}: ${m.name}</div>
+    <div class="stack" id="stk${k}" style="grid-template-columns:repeat(${D.arch[m.key] / 4},1fr);max-width:${D.arch[m.key] / D.arch[TNAME] * 100}%">${Array.from({ length: D.arch[m.key] }, (_, i) => `<i class="${i % 4 === 3 ? "f" : ""}"></i>`).join("")}</div>
+    <div class="stat"><div><div class="k">Layers</div><div class="v">${D.arch[m.key]}</div></div><div><div class="k">One pass</div><div class="v">${fmt(m.ms, 1)} ms</div></div><div><div class="k">Passes done</div><div class="v" id="pd${k}">0</div></div></div></div>`).join("");
+  $("#stackNote").textContent = `A token goes through every layer in turn. The animation runs ${SLOW} times slower than measured: a pass through the ${D.arch[TNAME]}-layer target takes about ${fmt(BASE.ms_target)} ms, and a pass through the ${D.arch[c.draft]}-layer ${c.draft} about ${fmt(c.ms_draft, 1)} ms (an estimate). The draft has ${pct(D.drafts[c.draft] / D.target_params)} of the target's parameters, but its pass costs ${pct(c.ms_draft / BASE.ms_target)} of a target pass: one prompt at a time, pass time follows the number of layers.`;
+  $("#archTbl").innerHTML = `<tr><th>Measure</th><th>Target: ${TNAME} + RLVR adapter</th><th>Draft: ${c.draft}</th></tr>` +
+    [["Role", "Decides every token that is written", "Guesses tokens for the target to check"],
+     ["Parameters", B(D.target_params), `${B(D.drafts[c.draft])} (${pct(D.drafts[c.draft] / D.target_params)} of the target)`],
+     ["Decoder layers", `${D.arch[TNAME]} (${D.arch[TNAME] * 3 / 4} linear attention + ${D.arch[TNAME] / 4} full attention)`, `${D.arch[c.draft]} (${D.arch[c.draft] * 3 / 4} linear attention + ${D.arch[c.draft] / 4} full attention)`],
+     ["Hidden size", fmt(D.hidden[TNAME]), fmt(D.hidden[c.draft])],
+     ["Tokenizer and vocabulary", "248,320 tokens", "the same 248,320 tokens (required)"],
+     ["Time for one single-token pass", `${fmt(BASE.ms_target)} ms`, `${fmt(c.ms_draft, 1)} ms (estimate)`],
+     ["Weights", "52 GB plus an 870 MB adapter, merged", `${D.disk[c.draft]} GB, as downloaded`],
+     ["Cache handling", "Copied before each round, restored after a rejection", "Copied before each round, restored after a rejection"]]
+      .map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join("");
+  clearInterval(sTimer);
+  const pos = [0, 0], done = [0, 0], cells = models.map((m, k) => [...document.querySelectorAll(`#stk${k} i`)]);
+  const paint = () => models.forEach((m, k) => { const i = Math.floor(pos[k]); cells[k].forEach((x, j) => x.classList.toggle("on", !STILL && j <= i && j > i - 3)); $(`#pd${k}`).textContent = done[k]; });
+  paint();
+  if (STILL) return;
+  sTimer = setInterval(() => { models.forEach((m, k) => { pos[k] += D.arch[m.key] * 50 / (m.ms * SLOW); if (pos[k] >= D.arch[m.key]) { pos[k] -= D.arch[m.key]; done[k]++; } }); paint(); }, 50);
+}
