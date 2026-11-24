@@ -217,6 +217,8 @@ summary{cursor:pointer;color:var(--text2);font-size:13px}
 <div class="grid two">
   <div class="card"><h3>GPU utilisation</h3><p class="note">Percent busy, mean per node per minute</p><svg id="gUtil"></svg></div>
   <div class="card"><h3>GPU memory in use</h3><p class="note">Mean per GPU per node, with the 286.5 GB capacity line</p><svg id="gMem"></svg></div>
+  <div class="card"><h3>Power per GPU</h3><p class="note">Watts, mean per GPU per node per minute</p><svg id="gPow"></svg></div>
+  <div class="card"><h3>Power and energy in numbers</h3><div class="scroll"><table id="powTbl"></table></div><p class="note" id="powNote"></p></div>
 </div>
 <div class="legend" id="lgNode"></div>
 <div class="card" style="margin-top:12px"><h3>Every GPU, every minute: percent busy</h3><p class="note">One row per GPU, one column per minute. Darker means busier. Hover for the reading.</p><svg id="gHeat"></svg></div>
@@ -400,6 +402,21 @@ function lines(id, key, y1, yt, yf, cap) {
 }
 lines("#gUtil", "util", 100, [0, 25, 50, 75, 100], v => v + "%");
 lines("#gMem", "mem", 300, [0, 100, 200, 300], v => v + " GB", CAP);
+(() => {
+  const all = G.pow.flat().filter(v => v != null), peak = Math.max(...all), low = Math.min(...all), top = Math.ceil(peak / 200) * 200;
+  lines("#gPow", "pow", top, [0, 1, 2, 3, 4].map(i => top * i / 4), v => fmt(v) + " W");
+  const hours = D.elapsed_s / 3600, kwh = G.pow_avg * D.gpus * hours / 1000, answers = C.reduce((s, c) => s + c.answers, 0), toks = C.reduce((s, c) => s + c.answers * c.mean_tokens, 0);
+  const perGpu = G.pow.map(r => avgOf(r));
+  $("#powTbl").innerHTML = `<tr><th>Measure</th><th>Value</th></tr>` +
+    [["Average power per GPU", `${fmt(G.pow_avg)} W`], ["Lowest and highest minute, any GPU", `${fmt(low)} W to ${fmt(peak)} W`],
+     ["Lowest and highest GPU, run average", `${fmt(Math.min(...perGpu))} W to ${fmt(Math.max(...perGpu))} W`],
+     ["All ${D.gpus} GPUs together, average".replace("${D.gpus}", D.gpus), `${fmt(G.pow_avg * D.gpus / 1000, 1)} kW`],
+     ["GPU energy for the whole run", `${fmt(kwh, 1)} kWh over ${fmt(D.elapsed_s / 60)} min`],
+     ["GPU energy per answer, all configurations together", `${fmt(kwh * 3.6e6 / answers)} J (${answers.toLocaleString("en-US")} answers)`],
+     ["GPU energy per generated token, all configurations together", `${fmt(kwh * 3.6e6 / toks, 1)} J`]]
+      .map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join("");
+  $("#powNote").textContent = `GPU power only, from nvidia-smi; CPUs, cooling and the rest of the node are not included. Each GPU cycled through all ${C.length} configurations for every question, so power cannot be split by configuration: the per-answer and per-token figures are averages over the whole run, including model loading and warm-up.`;
+})();
 $("#lgNode").innerHTML = D.nodes.map((n, i) => `<span><i style="background:${NCOL[i % 2]}"></i>${n} (GPUs ${i * 4} to ${i * 4 + 3})</span>`).join("");
 (() => {
   const svg = $("#gHeat"), WW = 1040, l = 110, rr = 12, t = 4, rh = 16, bt = 22, iw = WW - l - rr, cw = iw / NB, rowY = g => t + g * rh + Math.floor(g / 4) * 6, hh = rowY(D.gpus - 1) + rh - t, H = t + hh + bt;
