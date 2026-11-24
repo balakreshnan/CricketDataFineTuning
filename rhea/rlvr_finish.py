@@ -20,6 +20,12 @@ p.add_argument("--dataset_id", default="Balab2021/CricketData-T20-Reasoning-Qwen
 p.add_argument("--public", action="store_true")
 p.add_argument("--no_push", action="store_true")
 a = p.parse_args()
+nemotron = "nemotron" in a.base_model_id.lower()
+auto = "AutoModelForCausalLM" if nemotron else "AutoModelForImageTextToText"
+lora_where = ("the attention projections, the Mamba input projection and the shared expert of each mixture-of-experts layer "
+              "(routed experts and the Mamba output projection stay frozen)" if nemotron else
+              "the language model's attention, Gated-DeltaNet and MLP projections (for the mixture-of-experts model: the "
+              "shared-expert MLP only; the routed experts stay frozen)")
 
 run = Path(a.run_dir)
 res = json.loads((run / "train_result.json").read_text())
@@ -68,8 +74,7 @@ the model answered the questions itself and was rewarded only when its final num
 - Advantage: reward minus the mean reward of that question's samples. Loss: advantage x mean token negative log-likelihood
   of the sampled answer (policy gradient with a group baseline, one update per batch of fresh rollouts).
 - {res['steps']} steps, {res['rollouts_total']:,} rollouts in total, {res['world_size']} GPUs, learning rate {ta['lr']},
-  LoRA r={ta['lora_r']}, alpha={ta['lora_alpha']} on the language model's attention, Gated-DeltaNet and MLP projections (for the mixture-of-experts
-  model: the shared-expert MLP only; the routed experts stay frozen).
+  LoRA r={ta['lora_r']}, alpha={ta['lora_alpha']} on {lora_where}.
 - Training time: {res['train_hours']:.1f} hours on NVIDIA Vera Rubin GPUs.
 
 ## Before and after
@@ -92,10 +97,10 @@ The benchmark covers three of the dataset's six question types.
 ```python
 import torch
 from peft import PeftModel
-from transformers import AutoModelForImageTextToText, AutoTokenizer
+from transformers import {auto}, AutoTokenizer
 
 tok = AutoTokenizer.from_pretrained("{a.base_model_id}")
-model = AutoModelForImageTextToText.from_pretrained("{a.base_model_id}", dtype=torch.bfloat16, device_map="auto")
+model = {auto}.from_pretrained("{a.base_model_id}", dtype=torch.bfloat16, device_map="auto")
 model = PeftModel.from_pretrained(model, "{a.repo_id}")
 prompt = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=True)
 ```

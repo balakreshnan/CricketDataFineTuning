@@ -25,7 +25,7 @@ from pathlib import Path
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
-from transformers import AutoModelForImageTextToText, AutoTokenizer, GenerationConfig
+from transformers import GenerationConfig
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cricket_qa as Q  # noqa: E402
@@ -33,8 +33,14 @@ import sampling  # noqa: E402
 
 RANK, LOCAL_RANK = int(os.environ.get("RANK", 0)), int(os.environ.get("LOCAL_RANK", 0))
 QTYPES = ["run_rate", "chase_rate", "milestone", "projection", "strike_rate", "legal_balls"]
-LORA_TARGETS = (r"model\.language_model\.layers\.\d+\."
-                r"(self_attn\.(q|k|v|o)_proj|linear_attn\.(in_proj_qkv|in_proj_z|out_proj)|mlp\.(shared_expert\.)?(gate|up|down)_proj)")
+LORA_TARGETS = {
+    # Qwen3.5 family: attention, linear attention, MLP (for the MoE model: the shared expert only)
+    "qwen": (r"model\.language_model\.layers\.\d+\."
+             r"(self_attn\.(q|k|v|o)_proj|linear_attn\.(in_proj_qkv|in_proj_z|out_proj)|mlp\.(shared_expert\.)?(gate|up|down)_proj)"),
+    # Nemotron-H: attention projections, Mamba input projection, the shared expert of each MoE layer. Routed experts stay
+    # frozen (stacked weights), and PEFT refuses the Mamba out_proj and conv1d (the Mamba kernel reads their weights directly).
+    "nemotron_h": r"model\.layers\.\d+\.mixer\.(q_proj|k_proj|v_proj|o_proj|in_proj|shared_experts\.(up_proj|down_proj))",
+}
 
 
 def log(m):
@@ -62,6 +68,7 @@ p.add_argument("--save_steps", type=int, default=20)
 p.add_argument("--pool", type=int, default=100_000, help="training rows read to draw questions from")
 p.add_argument("--deadline", type=float, default=float(os.environ.get("TRAIN_DEADLINE", 0)))
 p.add_argument("--seed", type=int, default=42)
+p.add_argument("--lora_targets", default="", help="regex of module names to adapt; default depends on the model type")
 a = p.parse_args()
 
 torch.cuda.set_device(LOCAL_RANK)
@@ -86,11 +93,21 @@ random.Random(a.seed).shuffle(rows)
 need = a.steps * a.questions_per_gpu * WORLD
 assert need <= len(rows), f"need {need} questions, pool has {len(rows)}"
 
-tok = AutoTokenizer.from_pretrained(a.model_dir)
-model = AutoModelForImageTextToText.from_pretrained(a.model_dir, dtype=torch.bfloat16, device_map={"": LOCAL_RANK},
-                                                    attn_implementation="sdpa")
-model.enable_input_require_grads()          # needed for gradient checkpointing with a frozen base
-model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+tok = sampling.load_tokenizer(a.model_dir)
+model = sampling.load_model(a.model_dir, LOCAL_RANK)
+MTYPE = model.config.model_type
+targets = a.lora_targets or next(v for k, v in LORA_TARGETS.items() if MTYPE.startswith(k))
+if RANK == 0:
+    import re
+    hit = [n for n, _ in model.named_modules() if re.fullmatch(targets, n)]
+    kinds = sorted({re.sub(r"\.\d+\.", ".N.", n) for n in hit})
+    log(f"model type {MTYPE} ({type(model).__name__}); LoRA on {len(hit)} modules: {kinds}")
+    log("module name patterns: " + "; ".join(sorted({re.sub(r"\.\d+", ".N", n) for n, m in model.named_modules() if isinstance(m, torch.nn.Linear)})[:40]))
+try:
+    model.enable_input_require_grads()          # needed for gradient checkpointing with a frozen base
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+except Exception as e:  # not every architecture implements it
+    log(f"gradient checkpointing not enabled: {type(e).__name__}: {str(e)[:160]}")
 from peft import LoraConfig, PeftModel, get_peft_model  # noqa: E402
 
 ckpts = sorted(glob.glob(str(out / "ckpt" / "step-*")), key=lambda s: int(s.rsplit("-", 1)[1]))
@@ -100,7 +117,7 @@ if ckpts:
     start = int(ckpts[-1].rsplit("-", 1)[1])
 else:
     model = get_peft_model(model, LoraConfig(r=a.lora_r, lora_alpha=a.lora_alpha, lora_dropout=0.0,
-                                             target_modules=LORA_TARGETS, task_type="CAUSAL_LM"))
+                                             target_modules=targets, task_type="CAUSAL_LM"))
 if RANK == 0:
     model.print_trainable_parameters()
 params = [q for q in model.parameters() if q.requires_grad]
@@ -109,8 +126,7 @@ if ckpts and (Path(ckpts[-1]) / "optimizer.pt").exists():
     opt.load_state_dict(torch.load(Path(ckpts[-1]) / "optimizer.pt", map_location=dev))
 model._ddp_params_and_buffers_to_ignore = [k for k, q in model.named_parameters() if not q.requires_grad]
 ddp = torch.nn.parallel.DistributedDataParallel(model, device_ids=[LOCAL_RANK])
-stops = sampling.eos_ids(tok)
-eos = tok.convert_tokens_to_ids("<|im_end|>")
+stops = sampling.eos_ids(tok, a.model_dir)
 gen_cfg = GenerationConfig(do_sample=True, temperature=1.0, top_p=1.0, top_k=0, max_new_tokens=a.max_new_tokens,
                            num_return_sequences=a.group, use_cache=True, pad_token_id=tok.pad_token_id, eos_token_id=stops)
 log(f"world {WORLD}; {a.questions_per_gpu} questions x {a.group} samples per GPU = {a.questions_per_gpu * a.group * WORLD} "
@@ -158,7 +174,7 @@ def rollouts(qs):
         correct = bool(finished and Q.is_correct(Q.parse_answer(tok.decode(comp, skip_special_tokens=False)), q["gold"], q["kind"]))
         reward = 1.0 - a.len_coef * len(comp) / a.max_new_tokens if correct else 0.0
         recs.append({"g": j // a.group, "qtype": q["qtype"], "prompt": prompts[j // a.group],
-                     "comp": comp + ([eos] if finished else []), "n": len(comp), "finished": finished, "correct": correct,
+                     "comp": comp + ([toks[cut]] if finished else []), "n": len(comp), "finished": finished, "correct": correct,
                      "reward": reward})
     for g in range(len(qs)):
         grp = [r for r in recs if r["g"] == g]

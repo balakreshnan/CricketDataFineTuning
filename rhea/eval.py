@@ -15,7 +15,6 @@ from pathlib import Path
 
 import torch
 import torch.distributed as dist
-from transformers import AutoModelForImageTextToText, AutoTokenizer
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sampling  # noqa: E402
@@ -46,9 +45,8 @@ out = run / "eval"
 qs = [json.loads(l) for l in open(Path(a.data_dir) / "data" / "eval-00000.jsonl", encoding="utf-8")]
 if a.limit:
     qs = qs[: a.limit]
-tok = AutoTokenizer.from_pretrained(a.model_dir)
-model = AutoModelForImageTextToText.from_pretrained(a.model_dir, dtype=torch.bfloat16, device_map={"": LOCAL_RANK},
-                                                    attn_implementation="sdpa")
+tok = sampling.load_tokenizer(a.model_dir)
+model = sampling.load_model(a.model_dir, LOCAL_RANK)
 log(f"world {dist.get_world_size()}; {len(qs)} questions x {a.k} samples")
 
 

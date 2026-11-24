@@ -19,6 +19,12 @@ import cricket_qa as Q
 # Qwen3.8 model card, thinking mode: temperature=1.0, top_p=0.95, top_k=20 (greedy decoding can loop)
 THINKING_SAMPLING = {"temperature": 1.0, "top_p": 0.95, "top_k": 20}
 
+# The cuDNN scaled-dot-product-attention kernel costs several ms per call the first time it sees a sequence length, and
+# decoding changes the length on every token. Measured on Rhea (Vera Rubin): Nemotron generated at 250 ms per step with
+# it on and 18 ms with it off; Qwen3.8-27B at 8 tokens/s on and about 40 off. Every script that imports this module
+# therefore runs without it.
+torch.backends.cuda.enable_cudnn_sdp(False)
+
 
 def rank_world():
     return (dist.get_rank(), dist.get_world_size()) if dist.is_initialized() else (0, 1)
@@ -28,8 +34,36 @@ def prompt_text(tokenizer, messages):
     return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=True)
 
 
-def eos_ids(tokenizer):
-    return [tokenizer.convert_tokens_to_ids(t) for t in ("<|im_end|>", "<|endoftext|>")]
+def eos_ids(tokenizer, model_dir=None):
+    """Stop tokens: the ChatML end markers the tokenizer knows, plus the model's own generation_config eos ids."""
+    vocab = tokenizer.get_vocab()
+    ids = {vocab[t] for t in ("<|im_end|>", "<|endoftext|>") if t in vocab}
+    gc = Path(model_dir) / "generation_config.json" if model_dir else None
+    if gc is not None and gc.exists():
+        e = json.loads(gc.read_text()).get("eos_token_id")
+        ids |= set(e if isinstance(e, list) else [e] if e is not None else [])
+    if not ids:
+        ids = {tokenizer.eos_token_id}
+    return sorted(ids)
+
+
+def load_model(model_dir, device_index):
+    """Qwen checkpoints are vision-language classes; everything else (e.g. Nemotron-H) is a plain causal LM."""
+    import transformers
+    mtype = json.loads((Path(model_dir) / "config.json").read_text()).get("model_type", "")
+    if mtype.startswith("qwen"):
+        return transformers.AutoModelForImageTextToText.from_pretrained(
+            model_dir, dtype=torch.bfloat16, device_map={"": device_index}, attn_implementation="sdpa")
+    return transformers.AutoModelForCausalLM.from_pretrained(model_dir, dtype=torch.bfloat16, device_map={"": device_index})
+
+
+def load_tokenizer(model_dir):
+    import transformers
+    tok = transformers.AutoTokenizer.from_pretrained(model_dir)
+    if tok.pad_token_id is None:
+        pad = json.loads((Path(model_dir) / "config.json").read_text()).get("pad_token_id")
+        tok.pad_token_id = pad if pad is not None else tok.eos_token_id
+    return tok
 
 
 @torch.inference_mode()
@@ -48,9 +82,12 @@ def sample(model, tokenizer, questions, out_dir, tag, *, k, max_new_tokens, batc
     shard = [q for i, q in enumerate(questions) if i % world == rank and q["id"] not in done]
     prompts = [tokenizer(prompt_text(tokenizer, q["messages"]), add_special_tokens=False)["input_ids"] for q in shard]
     order = sorted(range(len(shard)), key=lambda i: -len(prompts[i]))
-    stops = eos_ids(tokenizer)
+    stops = eos_ids(tokenizer, getattr(model.config, "_name_or_path", None))
+    params = dict(THINKING_SAMPLING)
+    if not model.config.model_type.startswith("qwen"):
+        params["top_k"] = 0   # Nemotron card: temperature 1.0, top_p 0.95, no top-k
     gen_cfg = GenerationConfig(do_sample=True, max_new_tokens=max_new_tokens, num_return_sequences=k, use_cache=True,
-                               pad_token_id=tokenizer.pad_token_id, eos_token_id=stops, **THINKING_SAMPLING)
+                               pad_token_id=tokenizer.pad_token_id, eos_token_id=stops, **params)
     torch.manual_seed(seed * 1000 + rank)
     device = next(model.parameters()).device
     model.eval()
