@@ -31,6 +31,7 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | 11 | 2026-11-13 | Rhea | Cricket RLVR on a mixture-of-experts model | Qwen3.6-35B-A3B | LoRA r32 (attention + shared-expert MLP, 38.3M params), 60 steps, 61,440 rollouts, 4,096-token cap | 32 GPUs, 2.65 h training (jobs 40421, 47560, 47561; first benchmark 40423 ran out of GPU memory) | Accuracy 93.62% to 98.96%; tokens 2,177 to 151 (-93%); truncation 3.25% to 0; milestone 99.00% to 97.88% | Done |
 | 12 | 2026-11-14 | Rhea | Cricket RLVR rerun with GPU usage logged on all 32 GPUs | Qwen3.8-27B | Same recipe as row 10 but 120 steps (script default), 122,880 rollouts; run `cricket-rlvr-1114` | 32 GPUs, 1.76 h training (jobs 47941, 47943, 47944); avg utilisation 73% (65-78% per GPU), peak memory 260 of 286.5 GB | Accuracy 97.00% to 99.96%; tokens 734 to 119 (-84%); truncation 0.83% to 0; adapter in private HF repo `Balab2021/Qwen3.8-27B-Cricket-Reasoning-RLVR-120steps` (job 48773) | Done |
 | 13 | 2026-11-23 | Rhea | Speculative decoding benchmark (`rhea/specdec/`), run `specdec-qwen38-rlvr-1123` | Target Qwen3.8-27B + RLVR adapter; drafts Qwen3.5-0.8B/2B/4B/9B (base) | Own decoding loop with cache snapshots (transformers refuses assisted generation for these stateful models); cuDNN attention kernel off; 200 questions, 2/4/8 draft tokens per round | 8 GPUs, 40 min (job 120765); set-up jobs 120135-120720 | Slower than target alone: 36 tok/s alone vs 17-25 tok/s with a draft (best 0.70x, Qwen3.5-2B, 2 tokens per round); acceptance 17-57%; accuracy 100% everywhere | Done |
+| 14 | 2026-11-24 | Rhea | Cricket RL with NeMo RL (`rhea/nemorl/`), run `nemorl-cricket-1124` | Nemotron-3.5-Lightning-30B-A3B | GRPO + LoRA r32 in NeMo RL (Automodel backend, vLLM 0.33 generation, NeMo Gym rewards), 100 steps, 51,200 rollouts | 16 GPUs (4 nodes), about 100 min of steps in 2 jobs (131698, 131714); NeMo Gym evaluation job 132709 | NeMo Gym accuracy 86.50% to 97.71%; tokens 1,565 to 107 (-93%); truncation 9.42% to 0 | Done |
 
 ## Rhea job log
 
@@ -51,6 +52,14 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | 31955 | 11-12 | Probe with Triton patch (`sm_100a`) | 1 | about 2 min | Servers failed: assembler rejected `.target sm_107a` |
 | 31982 | 11-12 | Probe with patch, second version | 1 | 2:20 | Servers failed: GPU would not load `sm_100a` kernels |
 | 32031 | 11-12 | Probe with patch (`sm_100`) | 1 | 2:06 | Servers failed: prebuilt `GemmaRMSNorm` kernel has no Rubin build |
+| 131251 | 11-24 | NeMo RL smoke test, 1 node, 3 steps | 1 | about 15 min | Completed |
+| 131446 | 11-24 | NeMo RL smoke test, 2 nodes | 2 | 14:37 | Failed: reasoning parser plugin path was relative |
+| 131577 | 11-24 | NeMo RL smoke test, 2 nodes, absolute plugin path | 2 | 15:42 | Completed |
+| 131698 | 11-24 | NeMo RL full run, steps 1 to 70 | 4 | 1:30:04 | Time limit (expected; resumed) |
+| 131714 | 11-24 | NeMo RL full run, resumed, steps 66 to 100 | 4 | 31:32 | Completed |
+| 132709 | 11-24 | NeMo Gym evaluation, base and adapter | 1 | 14:05 | Completed |
+| 132831 | 11-24 | PEFT check of the NeMo RL adapter (apply and merge) | 1 | 2:54 | Completed |
+| 132928 | 11-24 | PEFT check again, then adapter upload to Hugging Face | 1 | 3:24 | Completed |
 
 ## Hugging Face repos (under `Balab2021`)
 
@@ -69,6 +78,7 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | `Qwen3.6-35B-A3B-Cricket-Reasoning-RLVR` | Adapter | Project 11 | Private |
 | `Qwen3.8-27B-Cricket-Reasoning-RLVR-120steps` | Adapter | Project 12 | Private |
 | `Cricket-SpecDec-Rhea` | Dataset (benchmark results) | Project 13 | Private |
+| `Nemotron-3.5-Lightning-30B-A3B-Cricket-NeMo-RL-Rhea` | Adapter only (not merged) | Project 14 | Public (user request, 2026-11-24) |
 
 ## Reports and runbooks
 
@@ -87,6 +97,8 @@ On every cluster: account `general_sa`, whole-node allocation, large files on `/
 | FinNews experiment table | `pulled/experiments_summary.md` |
 | EOS runbook | `eos/nemotron-cricket/README.md` |
 | Ptyche runbook | `ptyche/olympics/README.md` |
+| NeMo RL cricket run report (interactive) | `rhea/report/nemorl_cricket_report.html` (builder `rhea/report/build_nemorl.py`) |
+| NeMo RL tools and status | `rhea/nemorl/TOOLS.md` |
 
 ## Still on Rhea's Lustre
 
