@@ -1,0 +1,11 @@
+{
+ "run": "nemorl-cricket-1124 (2026-11-24)",
+ "steps": "100 steps of 64 questions x 8 sampled answers (51,200 rollouts)",
+ "nodes": "4 (16 GPUs)",
+ "base_accuracy": 86.50,
+ "tuned_accuracy": 97.71,
+ "base_tokens": 1565,
+ "tuned_tokens": 107,
+ "wandb": "https://wandb.ai/balabala76/nemotron35-cricket-nemo-rl-rhea",
+ "notes": "## Notes\n\n- By question type (base to adapter): `run_rate` 91.75% to 99.00%, `chase_rate` 68.12% to 94.62%, `milestone` 99.62% to 99.50%. The base model had 9.42% of its answers cut off at the 4,096-token limit; with the adapter none were.\n- The adapter makes the model answer with very little written reasoning (about 107 tokens on average). That is what the reward asked for; expect the same terse style on other questions.\n- Checked on 2026-11-24: Option 1 and Option 2 with transformers 5.22.2 and peft 0.21.2 (the adapter and the merged model give the same answers on sample questions), Option 3 with vLLM 0.31 (used for the results above).\n- `adapter_model.safetensors` holds 198 tensors. 12 of them belong to two `mtp` layers that exist in the NeMo Automodel version of the model but not in the transformers version; PEFT skips those 12 and loads the other 186.\n- Single training run, single seed. Differences of a point or less are not significant."
+}

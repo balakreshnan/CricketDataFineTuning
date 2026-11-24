@@ -6,9 +6,10 @@ What each piece of software does, grouped by which path uses it. Versions are th
 There are two training paths for the same task (cricket questions with exact numeric answers, LoRA, reward from a
 checker):
 
-- **`rlvr.py` path**: one self-contained PyTorch script written for this project. Queued on 8 nodes.
+- **`rlvr.py` path**: one self-contained PyTorch script written for this project. Its queued 8-node run was
+  cancelled on 2026-11-24 in favour of the NeMo RL path.
 - **NeMo RL path**: the same job split into three cooperating services (trainer, vLLM, NeMo Gym) under Ray.
-  Smoke-tested on one node (job 131251, 3 steps, passed).
+  Used for the full run on 4 nodes (100 steps, see section 6).
 
 Evaluation is the same for both.
 
@@ -74,16 +75,34 @@ Evaluation is the same for both.
 
 ## 6. Status of the NeMo RL path
 
-Tested on one node, 4 GPUs (job 131251, run `nemorl-smoke-1124`):
+Works on 1, 2 and 4 nodes (4 Vera Rubin GPUs each). For more than one node, `nemorl/train.sbatch` starts a Ray head
+on the first node and a Ray worker on every other node, and NeMo RL attaches to that cluster (`RAY_ADDRESS`).
 
-| Step | Average reward | Average answer length (tokens) | Step time |
-|---|---|---|---|
-| 1 | 0.72 | 1,667 | 238 s |
-| 2 | 0.75 | 1,470 | 138 s |
-| 3 | 0.82 | 1,460 | 128 s |
+Full run `nemorl-cricket-1124` (2026-11-24): 4 nodes, 16 GPUs, 100 steps of 64 questions x 8 answers, checkpoint
+every 5 steps, metrics in W&B project `nemotron35-cricket-nemo-rl-rhea`.
 
-Each step: 16 questions x 8 answers. Peak GPU memory 106 GB of 286 GB. The checkpoint contains a LoRA adapter
-(`adapter_model.safetensors`, 95 MB).
+| Job | What | Result |
+|---|---|---|
+| 131698 | Steps 1 to 70 | Stopped by its 90-minute limit |
+| 131714 | Resumed from the step-65 checkpoint, steps 66 to 100 | Completed in 31 minutes |
+| 132709 | NeMo Gym evaluation, 600 held-out questions x 4 answers, vLLM serving the adapter as a LoRA module | Completed |
 
-Not tested yet: more than one node (needs NeMo RL's Ray-on-Slurm launcher `ray.sub`), W&B logging, Hugging Face
-upload, a full-length run.
+| | Base model | Base + adapter |
+|---|---|---|
+| Accuracy | 86.50% | 97.71% |
+| Average output tokens | 1,565 | 107 |
+| Answers cut off at 4,096 tokens | 9.42% | 0.00% |
+| `run_rate` accuracy | 91.75% | 99.00% |
+| `chase_rate` accuracy | 68.12% | 94.62% |
+| `milestone` accuracy | 99.62% | 99.50% |
+
+Notes:
+
+- Training reward on the sampled questions went from 0.72 (step 1) to about 0.96 (step 100); step time fell from
+  233 s to about 40 s as answers got shorter.
+- The output is a LoRA adapter only (`adapter_model.safetensors`, 95 MB, PEFT key names). The base weights are not
+  changed, so the adapter must be applied to or merged into the base model at inference.
+- A resumed job logs to a new W&B run (steps 1 to 70 in run `kqadpwsx`, 66 to 100 in `ijt9bvh1`).
+- Jobs of 90 minutes started within minutes; longer jobs were estimated to wait 7 to 8 hours, so long runs are
+  chains of 90-minute jobs that resume from the latest checkpoint.
+- `reasoning_parser_plugin` in the config must be an absolute path when more than one node is used.

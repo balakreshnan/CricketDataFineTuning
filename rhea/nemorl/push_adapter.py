@@ -11,6 +11,8 @@ results.json (optional): {"run": ..., "steps": ..., "nodes": ..., "base_accuracy
 import argparse
 import json
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 from huggingface_hub import HfApi
@@ -34,7 +36,8 @@ def row(label, key, fmt="{}"):
 
 results = ""
 if r.get("base_accuracy") is not None and r.get("tuned_accuracy") is not None:
-    results = ("## Results\n\n600 held-out questions, 4 sampled answers each (temperature 1.0, top-p 0.95).\n\n"
+    results = ("## Results\n\n600 held-out questions, 4 sampled answers each (temperature 1.0, top-p 0.95, up to 4,096 output tokens),\n"
+               "scored by the cricket NeMo Gym environment with the adapter served by vLLM as a LoRA module.\n\n"
                "| | Base model | Base + this adapter |\n|---|---|---|\n"
                f"| Accuracy | {r['base_accuracy']:.2f}% | {r['tuned_accuracy']:.2f}% |\n")
     if r.get("base_tokens") is not None and r.get("tuned_tokens") is not None:
@@ -83,7 +86,7 @@ from peft import PeftModel
 
 base = "{BASE}"
 tok = AutoTokenizer.from_pretrained(base)
-model = AutoModelForCausalLM.from_pretrained(base, torch_dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(base, dtype=torch.bfloat16, device_map="auto")
 model = PeftModel.from_pretrained(model, "{a.repo_id}")   # adapter applied on top of the base model
 ```
 
@@ -105,6 +108,14 @@ Then request the model name `cricket` (the adapter) instead of the base model na
 
 {r.get("notes", "")}
 """
+# Upload a staged copy: the training copy stays untouched, and the local base-model path in adapter_config.json
+# is replaced by the Hub id so that PeftModel.from_pretrained finds the base model anywhere.
+stage = Path(tempfile.mkdtemp(prefix="adapter-")) / "adapter"
+shutil.copytree(src, stage)
+src = stage
+cfg = json.load(open(src / "adapter_config.json"))
+cfg["base_model_name_or_path"] = BASE
+json.dump(cfg, open(src / "adapter_config.json", "w"), indent=2)
 (src / "README.md").write_text(card, encoding="utf-8")
 api = HfApi(token=os.environ["HF_TOKEN"])
 api.create_repo(a.repo_id, private=a.private, exist_ok=True)
