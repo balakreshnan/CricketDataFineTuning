@@ -1,0 +1,164 @@
+# NeMo RL recipe: GRPO with LoRA on Nemotron 3.5 Lightning 30B, rewards from the cricket NeMo Gym environment.
+# Copied to <NeMo RL>/examples/nemo_gym/cricket_rhea.yaml by train.sbatch, so "defaults" resolves inside the repo.
+# Paths and sizes marked ${oc.env:...} come from train.sbatch.
+#
+# Mirrors rhea/rlvr.py where NeMo RL has the same knob:
+#   LoRA r=32 alpha=64, lr 1e-4 with 10 warm-up steps, grad clip 1.0, 8 answers per question, temperature 1.0,
+#   top_p 0.95, up to 4096 new tokens, reward 1 - 0.4 * tokens/4096 for a finished correct answer (in the environment).
+# Differs: GRPO loss with ratio clipping and importance-sampling correction, leave-one-out baseline with reward
+# normalisation, generation by vLLM on the same GPUs (weights pushed to it after every step).
+defaults: ../configs/grpo_math_1B.yaml
+
+grpo:
+  num_prompts_per_step: ${oc.decode:${oc.env:NRL_PROMPTS,16}}
+  num_generations_per_prompt: 8
+  max_num_steps: ${oc.decode:${oc.env:NRL_STEPS,3}}
+  max_num_epochs: 1
+  normalize_rewards: true
+  use_leave_one_out_baseline: true
+  overlong_filtering: false
+  val_period: ${oc.decode:${oc.env:NRL_VAL_PERIOD,1000000}}
+  val_at_start: false
+  val_at_end: false
+  max_val_samples: null     # NeMo Gym runs use the validation file as it is
+  val_batch_size: 64
+  val_num_generations_per_prompt: 1
+
+loss_fn:
+  reference_policy_kl_penalty: 0.0
+  ratio_clip_min: 0.2
+  ratio_clip_max: 0.2
+  use_on_policy_kl_approximation: true
+  use_importance_sampling_correction: true
+
+checkpointing:
+  enabled: true
+  checkpoint_dir: ${oc.env:NRL_RUN_DIR}/checkpoints
+  metric_name: null
+  keep_top_k: 3
+  save_period: ${oc.decode:${oc.env:NRL_SAVE_PERIOD,10}}
+
+policy:
+  model_name: ${oc.env:MODEL_DIR}
+  train_global_batch_size: ${mul:${grpo.num_prompts_per_step}, ${grpo.num_generations_per_prompt}}
+  train_micro_batch_size: 1
+  logprob_batch_size: 1
+  max_total_sequence_length: 6144          # prompt (up to ~2k tokens) + 4096 generated
+  make_sequence_length_divisible_by: 64
+  max_grad_norm: 1.0
+  automodel_cfg:
+    enabled: true
+    activation_checkpointing: true
+    # Settings of NeMo RL's own Nemotron 3.5 Lightning recipe (dapo-nanov3.5-30BA3B-4n8g-automodel-ep8.yaml): Automodel's
+    # NemotronH implementation. force_hf (the Hugging Face implementation) fails at start-up with this checkpoint
+    # ("initialize_weights() got an unexpected keyword argument dtype", then a DTensor copy error).
+    expert_parallel_size: 4
+    moe_parallelizer:
+      ignore_router_for_ac: true
+    # The recipe also sets PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True. Left out: on Rubin the first weight
+    # push to vLLM then died in torch.cuda.empty_cache() ("std::get: wrong index for variant"); being tested.
+    automodel_kwargs:
+      backend:
+        _target_: nemo_automodel.components.models.common.utils.BackendConfig
+        attn: te
+        linear: te
+        rms_norm: torch_fp32
+        experts: gmm
+        dispatcher: hybridep
+        rope_fusion: false
+        enable_hf_state_dict_adapter: true
+    lora_cfg:
+      enabled: true
+      dim: 32
+      alpha: 64
+      match_all_linear: false
+      target_modules: ["*q_proj", "*k_proj", "*v_proj", "*o_proj", "*in_proj", "*shared_experts.up_proj", "*shared_experts.down_proj"]
+      exclude_modules: []                   # cannot be combined with target_modules; Mamba out_proj is simply not targeted
+      use_triton: false
+  sequence_packing:
+    enabled: false
+  dynamic_batching:
+    enabled: true
+  optimizer:
+    name: "torch.optim.AdamW"
+    kwargs:
+      lr: 1.0e-4
+      weight_decay: 0.0
+      betas: [0.9, 0.999]
+      eps: 1e-8
+  scheduler:
+    - name: "torch.optim.lr_scheduler.LinearLR"
+      kwargs:
+        start_factor: 0.1
+        end_factor: 1.0
+        total_iters: 10
+    - name: "torch.optim.lr_scheduler.ConstantLR"
+      kwargs:
+        factor: 1.0
+        total_iters: 10000000000
+    - milestones: [10]
+  generation:
+    backend: "vllm"
+    max_new_tokens: 4096
+    temperature: 1.0
+    top_p: 0.95
+    # LoRA weights are merged into the full weights before they are pushed to vLLM. The default ("native", adapter
+    # tensors only) does not support the async engine / HTTP server, which NeMo Gym requires.
+    lora_refit_mode: merged
+    vllm_cfg:
+      async_engine: true
+      expose_http_server: true                # NeMo Gym talks to the policy through this server
+      tensor_parallel_size: 1
+      gpu_memory_utilization: 0.35            # of 286 GB per GPU; training shares the GPU
+      max_model_len: ${policy.max_total_sequence_length}
+      enforce_eager: true
+      # absolute path: Ray workers on other nodes do not start in the NeMo RL directory
+      reasoning_parser_plugin: ${oc.env:NRL_REPO}/nemo_rl/models/generation/vllm/reasoning_parsers/nano_v3_reasoning_parser.py
+      http_server_serving_chat_kwargs:
+        reasoning_parser: nano_v3
+    vllm_kwargs:
+      mamba_ssm_cache_dtype: "float32"
+    colocated:
+      enabled: true
+
+data:
+  max_input_seq_length: null
+  shuffle: true
+  num_workers: 1
+  train:
+    dataset_name: NemoGymDataset
+    data_path: ${oc.env:NRL_DATA}/train.jsonl
+    split_validation_size: 0
+  validation:
+    dataset_name: NemoGymDataset
+    data_path: ${oc.env:NRL_DATA}/validation.jsonl
+  default:
+    dataset_name: NemoGymDataset
+    env_name: "nemo_gym"
+    prompt_file: null
+    system_prompt_file: null
+    processor: "nemo_gym_data_processor"
+
+env:
+  should_use_nemo_gym: true
+  should_log_nemo_gym_responses: true
+  should_mask_flagged_samples: true
+  nemo_gym:
+    port_range_low: 5000
+    port_range_high: 5999
+    config_paths:
+      - responses_api_models/vllm_model/configs/vllm_model_for_training.yaml   # required for training
+      - resources_servers/cricket_qa/configs/cricket_qa.yaml
+
+logger:
+  log_dir: ${oc.env:NRL_RUN_DIR}/logs
+  wandb_enabled: ${oc.decode:${oc.env:NRL_WANDB,true}}
+  tensorboard_enabled: false
+  monitor_gpus: true
+  wandb:
+    project: ${oc.env:WANDB_PROJECT,nemotron35-cricket-nemo-rl-rhea}
+    name: ${oc.env:RUN_NAME}
+
+cluster:
+  gpus_per_node: 4
+  num_nodes: ${oc.decode:${oc.env:NRL_NODES,1}}
