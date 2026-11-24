@@ -1,0 +1,37 @@
+# NeMo Gym environment for the cricket benchmark (600 held-out questions, exact numeric answers).
+cricket_qa_resources_server:
+  resources_servers:
+    cricket_qa:
+      entrypoint: app.py
+      domain: other
+      verified: false
+      description: T20 cricket rate and milestone questions with exact numeric answers
+      datasets:
+      - name: validation        # the 600 held-out benchmark questions (type "benchmark" would require a prepare script)
+        type: validation
+        jsonl_fpath: resources_servers/cricket_qa/data/benchmark.jsonl
+        num_repeats: 1          # answers per question are set on the command line (--num-repeats)
+        license: Apache 2.0
+      - name: example
+        type: example
+        jsonl_fpath: resources_servers/cricket_qa/data/example.jsonl
+        num_repeats: 1
+
+cricket_qa_simple_agent:
+  responses_api_agents:
+    simple_agent:
+      entrypoint: app.py
+      resources_server:
+        type: resources_servers
+        name: cricket_qa_resources_server
+      model_server:
+        type: responses_api_models
+        name: policy_model
+
+cricket_qa_environment_server:
+  environment_servers:
+    legacy_agent:
+      entrypoint: app.py
+      agent_server:
+        type: responses_api_agents
+        name: cricket_qa_simple_agent
