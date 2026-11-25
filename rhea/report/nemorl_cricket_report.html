@@ -325,6 +325,59 @@ footer{color:var(--muted);font-size:.84rem;padding:8px 0 28px}
 </section>
 
 <!-- ============================ 7. insights ============================ -->
+<section class="card" id="sec-tools" aria-labelledby="h-tools">
+  <h2 id="h-tools">Tools and SDKs used</h2>
+  <p>Which tool did which job, for training with NeMo RL and for evaluation with NeMo Gym. Versions are the ones
+  installed for this run.</p>
+  <h3>Training (NeMo RL)</h3>
+  <div class="tbl-x">
+  <table>
+    <thead><tr><th>Function</th><th>Tool or SDK</th><th>How it was used</th></tr></thead>
+    <tbody>
+      <tr><td>Training loop and algorithm</td><td>NeMo RL (<code>nemo_rl</code>, main branch, commit a03ffa1)</td><td>GRPO with ratio clipping, importance-sampling correction and a leave-one-out baseline. Driver script <code>examples/nemo_gym/run_grpo_nemo_gym.py</code>.</td></tr>
+      <tr><td>Process orchestration</td><td>Ray</td><td>Ray head on the first node and a Ray worker on each of the other three, started by the Slurm job script; NeMo RL attaches to that cluster and runs the trainer, vLLM and NeMo Gym as Ray actors.</td></tr>
+      <tr><td>Policy training backend</td><td>NeMo Automodel 0.6.1 on PyTorch 2.13</td><td>Its own Nemotron implementation, sharded across the 16 GPUs, with its own LoRA layers (not <code>peft</code>). Saves the adapter with PEFT-style names.</td></tr>
+      <tr><td>Compiled kernels for training</td><td>Transformer Engine 2.18, flash-attn 2.8.1, mamba-ssm 2.3.2, causal-conv1d 1.6.2, DeepEP, grouped GEMM</td><td>Built from source on a Rhea node, about 30 minutes the first time.</td></tr>
+      <tr><td>Generating answers</td><td>vLLM 0.33 on PyTorch 2.14, with FlashInfer 0.7.2</td><td>One engine per GPU, sharing the GPU with the trainer, exposed as an OpenAI-compatible HTTP server.</td></tr>
+      <tr><td>Weight sync, trainer to vLLM</td><td>NeMo RL refit</td><td><code>lora_refit_mode: merged</code>: the LoRA weights are merged into full weights and pushed into the vLLM engines after every step.</td></tr>
+      <tr><td>Environment and reward</td><td>NeMo Gym (version pinned by NeMo RL)</td><td>Cricket environment <code>cricket_qa</code>: an agent server, a resources server that checks the final number, and a model proxy that calls vLLM over HTTP.</td></tr>
+      <tr><td>Configuration</td><td>Hydra / OmegaConf YAML</td><td><code>nemorl/cricket_rhea.yaml</code>, which inherits NeMo RL's <code>grpo_math_1B.yaml</code>.</td></tr>
+      <tr><td>Python environments</td><td><code>uv</code>, Python 3.13.14</td><td>One environment per worker type, stored on Lustre.</td></tr>
+      <tr><td>JIT kernel compiler</td><td>Triton 3.7 (trainer) and 3.8 (vLLM)</td><td>Needs the project's <code>sitecustomize.py</code> patch to run on Vera Rubin.</td></tr>
+      <tr><td>Container</td><td>NVIDIA PyTorch development image for Rubin (arm64)</td><td>Used for its compilers and CUDA toolkit; NeMo RL's Python stack comes from <code>uv</code>.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h3>Evaluation (NeMo Gym)</h3>
+  <div class="tbl-x">
+  <table>
+    <thead><tr><th>Function</th><th>Tool or SDK</th><th>How it was used</th></tr></thead>
+    <tbody>
+      <tr><td>Environment evaluation</td><td>NeMo Gym 0.7.0 command line (<code>gym eval run</code>)</td><td>Runs the <code>cricket_qa</code> environment on the 600 held-out questions, 4 sampled answers each, for the base model and for base + adapter.</td></tr>
+      <tr><td>Serving for the evaluation</td><td>vLLM 0.31, NVIDIA Rubin build</td><td>Serves the base model and the adapter side by side (<code>--enable-lora --lora-modules</code>), reasoning parser <code>nemotron_v3</code>.</td></tr>
+      <tr><td>Scoring</td><td>Project code <code>cricket_qa.py</code> inside the NeMo Gym resources server</td><td>Exact check of the final number; records correct, finished, output tokens and reasoning tokens for every answer.</td></tr>
+      <tr><td>Summaries</td><td>Project code <code>gym_summary.py</code></td><td>Accuracy, pass@k, average output tokens, cut-off rate and no-answer rate, overall and per question type; logged to Weights &amp; Biases.</td></tr>
+      <tr><td>Adapter compatibility check</td><td>Hugging Face <code>transformers</code> 5.22.2 and <code>peft</code> 0.21.2</td><td>Applies the adapter to the base model, merges it, and compares answers with the base model on sample questions.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h3>Shared infrastructure</h3>
+  <div class="tbl-x">
+  <table>
+    <thead><tr><th>Function</th><th>Tool or SDK</th><th>How it was used</th></tr></thead>
+    <tbody>
+      <tr><td>Job scheduling</td><td>Slurm with enroot / pyxis containers</td><td>Training as two 90-minute, 4-node jobs; evaluation, check and upload as one-node jobs.</td></tr>
+      <tr><td>Storage</td><td>Lustre</td><td>Models, data, Python environments, checkpoints and logs.</td></tr>
+      <tr><td>Metrics</td><td>Weights &amp; Biases</td><td>Training metrics per step and the evaluation summary.</td></tr>
+      <tr><td>Adapter hosting</td><td>Hugging Face Hub (<code>huggingface_hub</code>)</td><td>Adapter only, public repository, with a model card.</td></tr>
+      <tr><td>GPU telemetry</td><td><code>nvidia-smi</code></td><td>Utilisation, memory, power and temperature every 15 s on every node.</td></tr>
+      <tr><td>Model</td><td><code>nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16</code></td><td>Base model; its weights are not changed.</td></tr>
+      <tr><td>Dataset</td><td><code>Balab2021/CricketData-T20-Reasoning-Qwen3.8-Full</code></td><td>458,702 training questions, 600 held out for evaluation.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
 <section class="card" id="sec-ins" aria-labelledby="h-ins">
   <h2 id="h-ins">Insights and caveats</h2>
   <div class="cols">
