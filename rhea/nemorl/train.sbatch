@@ -11,16 +11,21 @@
 #            that NeMo RL ray.sub registers), and NeMo RL attaches to that cluster.
 # NeMo RL serves the policy with vLLM on the training GPUs and runs NeMo Gym on the first node.
 # GPU utilisation, memory, power and temperature are logged every 15 s on every node to <run>/gpulog.
-# Export: RUN_NAME (required), NRL_STEPS (3), NRL_PROMPTS (16 per node), NRL_SAVE_PERIOD (10), NRL_WANDB (true), EXTRA_ARGS
+# Export: RUN_NAME (required), NRL_STEPS (3), NRL_PROMPTS (16 per node), NRL_SAVE_PERIOD (10), NRL_WANDB (true), EXTRA_ARGS,
+#         NRL_SRC_DATA (cricket dataset) and NRL_DATA (task files) to train on another dataset in the same layout,
+#         NRL_SEED (42), NRL_LEN_COEF (0.4; reward of a correct answer = 1 - coef * output_tokens / 4096)
 set -uo pipefail
 source "${CODE_DIR:-/home/bbalakreshna/clustercodes}/nemorl/nemorl.env"
 N=$SLURM_JOB_NUM_NODES
 export RUN_NAME NRL_STEPS=${NRL_STEPS:-3} NRL_PROMPTS=${NRL_PROMPTS:-$((16 * N))} NRL_SAVE_PERIOD=${NRL_SAVE_PERIOD:-10}
 export NRL_WANDB=${NRL_WANDB:-true} EXTRA_ARGS="${EXTRA_ARGS:-}" NRL_NODES=$N
-export NRL_RUN_DIR=$NRL_ROOT/runs/$RUN_NAME NRL_DATA=$NRL_ROOT/data
+export NRL_SEED=${NRL_SEED:-42} NRL_LEN_COEF=${NRL_LEN_COEF:-0.4}
+export NRL_GYM_CFG=cricket_qa_len$NRL_LEN_COEF.yaml
+export NRL_RUN_DIR=$NRL_ROOT/runs/$RUN_NAME NRL_DATA=${NRL_DATA:-$NRL_ROOT/data}
+export NRL_SRC_DATA=${NRL_SRC_DATA:-$DATA_LOCAL}   # dataset folder in the cricket layout (data/train-*.jsonl, data/eval-00000.jsonl)
 HEAD=$(hostname -s); export HEAD_IP=$(hostname -i | awk "{print \$1}") RAY_PORT=1200
 mkdir -p "$NRL_RUN_DIR/gpulog" "$NRL_RUN_DIR/ray" "$NRL_DATA" "$NRL_VENVS"
-echo "[$(date +%T)] job $SLURM_JOB_ID, $N node(s) $SLURM_JOB_NODELIST, head $HEAD ($HEAD_IP): NeMo RL run $RUN_NAME, $NRL_STEPS steps x $NRL_PROMPTS questions x 8 answers; out $NRL_RUN_DIR"
+echo "[$(date +%T)] job $SLURM_JOB_ID, $N node(s) $SLURM_JOB_NODELIST, head $HEAD ($HEAD_IP): NeMo RL run $RUN_NAME, $NRL_STEPS steps x $NRL_PROMPTS questions x 8 answers, seed $NRL_SEED, length coefficient $NRL_LEN_COEF; out $NRL_RUN_DIR"
 srun --overlap -N "$N" --ntasks-per-node=1 bash -c 'exec nvidia-smi --query-gpu=timestamp,index,utilization.gpu,memory.used,memory.total,power.draw,temperature.gpu --format=csv,noheader,nounits -l 15 > "'"$NRL_RUN_DIR"'/gpulog/$(hostname -s)-'"$SLURM_JOB_ID"'.csv"' >/dev/null 2>&1 &
 GPULOG_PID=$!
 CONT=(--container-image="$IMAGE_SQSH" --container-mounts="$LUSTRE_DIR:$LUSTRE_DIR" --container-mount-home --no-container-remap-root)
@@ -42,7 +47,7 @@ fi
 srun --overlap -N 1 -n 1 -w "$HEAD" "${CONT[@]}" bash -c '
   set -uo pipefail
   source '"$CODE_DIR"'/nemorl/node_env.sh
-  export NRL_RUN_DIR NRL_DATA RUN_NAME NRL_STEPS NRL_PROMPTS NRL_SAVE_PERIOD NRL_WANDB NRL_NODES   # read by cricket_rhea.yaml
+  export NRL_RUN_DIR NRL_DATA RUN_NAME NRL_STEPS NRL_PROMPTS NRL_SAVE_PERIOD NRL_WANDB NRL_NODES NRL_SEED NRL_LEN_COEF NRL_GYM_CFG NRL_SRC_DATA   # read by cricket_rhea.yaml
   export WANDB_DIR=$NRL_RUN_DIR
   if (( NRL_NODES > 1 )); then
     rank=$((10#$(hostname -s | tr -dc 0-9)))
@@ -61,7 +66,7 @@ srun --overlap -N 1 -n 1 -w "$HEAD" "${CONT[@]}" bash -c '
   else
     export RAY_TMPDIR=/tmp/ray-$SLURM_JOB_ID; mkdir -p "$RAY_TMPDIR"
   fi
-  python3 '"$CODE_DIR"'/nemorl/prepare.py '"$CODE_DIR"' "$DATA_LOCAL" "$NRL_REPO" "$NRL_DATA"
+  python3 '"$CODE_DIR"'/nemorl/prepare.py '"$CODE_DIR"' "$NRL_SRC_DATA" "$NRL_REPO" "$NRL_DATA"
   cp '"$CODE_DIR"'/nemorl/cricket_rhea.yaml "$NRL_REPO/examples/nemo_gym/cricket_rhea.yaml"
   cd "$NRL_REPO"
   echo "[$(date +%T)] starting NeMo RL"

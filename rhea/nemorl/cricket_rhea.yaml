@@ -14,6 +14,7 @@ grpo:
   num_generations_per_prompt: 8
   max_num_steps: ${oc.decode:${oc.env:NRL_STEPS,3}}
   max_num_epochs: 1
+  seed: ${oc.decode:${oc.env:NRL_SEED,42}}
   normalize_rewards: true
   use_leave_one_out_baseline: true
   overlong_filtering: false
@@ -148,7 +149,7 @@ env:
     port_range_high: 5999
     config_paths:
       - responses_api_models/vllm_model/configs/vllm_model_for_training.yaml   # required for training
-      - resources_servers/cricket_qa/configs/cricket_qa.yaml
+      - resources_servers/cricket_qa/configs/${oc.env:NRL_GYM_CFG,cricket_qa.yaml}   # one file per length coefficient
 
 logger:
   log_dir: ${oc.env:NRL_RUN_DIR}/logs

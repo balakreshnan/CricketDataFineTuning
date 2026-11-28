@@ -7,6 +7,7 @@ the environment, to <nemo_rl_repo>/3rdparty/Gym-workspace/Gym/resources_servers/
 """
 import glob
 import json
+import os
 import re
 import shutil
 import sys
@@ -19,14 +20,31 @@ dst = gym / "resources_servers" / "cricket_qa"
 (dst / "data").mkdir(exist_ok=True)
 out.mkdir(parents=True, exist_ok=True)
 src = code / "nemorl" / "gym" / "cricket_qa"
-shutil.copy(src / "app.py", dst / "app.py")
-shutil.copy(src / "configs" / "cricket_qa.yaml", dst / "configs" / "cricket_qa.yaml")
-shutil.copy(code / "cricket_qa.py", dst / "cricket_rules.py")       # the project answer parser and checker
+
+
+def put(path, text):
+    """Write only if the content differs, and atomically: several jobs may run this at the same time."""
+    if path.is_file() and path.read_text(encoding="utf-8") == text:
+        return
+    tmp = path.with_name(f"{path.name}.tmp{os.getpid()}")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+put(dst / "app.py", (src / "app.py").read_text(encoding="utf-8"))
+cfg = (src / "configs" / "cricket_qa.yaml").read_text(encoding="utf-8")
+put(dst / "configs" / "cricket_qa.yaml", cfg)
+# One config file per length coefficient (NRL_LEN_COEF), selected by NRL_GYM_CFG in cricket_rhea.yaml.
+coef = os.environ.get("NRL_LEN_COEF", "0.4")
+cfg_coef, n = re.subn(r"len_coef: [0-9.]+", f"len_coef: {float(coef)}", cfg)
+assert n == 1, "len_coef line not found in cricket_qa.yaml"
+put(dst / "configs" / f"cricket_qa_len{coef}.yaml", cfg_coef)
+put(dst / "cricket_rules.py", (code / "cricket_qa.py").read_text(encoding="utf-8"))   # the project answer parser and checker
 # Same dependency file as a simple existing environment, under this environment's name.
 pp = (gym / "resources_servers" / "mcqa" / "pyproject.toml").read_text()
 pp = pp.replace("gym-resources-servers-mcqa", "gym-resources-servers-cricket-qa")
 pp = re.sub(r'\n    "tiktoken",', "", pp)
-(dst / "pyproject.toml").write_text(pp)
+put(dst / "pyproject.toml", pp)
 
 AGENT = {"type": "responses_api_agents", "name": "cricket_qa_simple_agent"}
 
@@ -44,7 +62,7 @@ for f in sorted(glob.glob(str(data / "data" / "train-*.jsonl"))):
 val = [task(r, r["gold"]) for r in (json.loads(l) for l in open(data / "data" / "eval-00000.jsonl", encoding="utf-8"))]
 for name, rows in (("train.jsonl", train), ("validation.jsonl", val), ("example.jsonl", val[:6])):
     text = "".join(json.dumps(t, ensure_ascii=False) + "\n" for t in rows)
-    (dst / "data" / name).write_text(text, encoding="utf-8")
+    put(dst / "data" / name, text)
     if name != "example.jsonl":
-        (out / name).write_text(text, encoding="utf-8")
-print(f"cricket_qa installed in {dst}; {len(train)} train tasks, {len(val)} validation tasks; data in {out}")
+        put(out / name, text)
+print(f"cricket_qa installed in {dst} (len_coef {coef}); {len(train)} train tasks, {len(val)} validation tasks; data in {out}")
